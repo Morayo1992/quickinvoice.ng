@@ -1,19 +1,19 @@
 const SUPABASE_URL = "https://owsismprvbndwlaktohz.supabase.co"
 const SUPABASE_KEY = "sb_publishable_8auPuaDH5Iq65d_6LwPEKQ_yilaScba"
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
 
 let currentUser = null;
 
 async function getUser(){
-  let { data: { user } } = await supabase.auth.getUser()
+  let { data: { user } } = await supabaseClient.auth.getUser()
   if(!user){
     let email = `user_${Date.now()}@quickinvoice.ng`
-    let { data, error } = await supabase.auth.signUp({ email, password: "Password123!" })
+    let { data, error } = await supabaseClient.auth.signUp({ email, password: "Password123!" })
     if(error){ console.error(error); return null; }
     user = data.user
     
     if(user){
-      await supabase.from("profiles").insert({
+      await supabaseClient.from("profiles").insert({
         id: user.id,
         email: email,
         business_name: document.getElementById("bizName")?.value || "My Business",
@@ -38,8 +38,8 @@ async function generateInvoice(){
   const user = await getUser()
   if(!user) return alert("Please refresh page")
   
-  let { data: invoices } = await supabase.from("invoices").select("*").eq("user_id", user.id)
-  let { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
+  let { data: invoices } = await supabaseClient.from("invoices").select("*").eq("user_id", user.id)
+  let { data: profile } = await supabaseClient.from("profiles").select("*").eq("id", user.id).single()
   
   if(!profile?.is_pro && invoices && invoices.length >= 3){
     alert("Free limit reached (3/month). Please upgrade to Pro for ₦3,000")
@@ -64,18 +64,22 @@ async function generateInvoice(){
     }
   }
 
-  await supabase.from("profiles").upsert({
+  if(total === 0) return alert("Add at least one item with price")
+
+  await supabaseClient.from("profiles").upsert({
     id: user.id,
     business_name: bizName
   }, { onConflict: 'id' })
 
-  await supabase.from("invoices").insert({
+  let { error } = await supabaseClient.from("invoices").insert({
     user_id: user.id,
     client_name: clientName,
     items: items,
     total: total,
     invoice_number: "QI-"+Date.now().toString().slice(-5)
   })
+  
+  if(error){ console.error(error); return alert("Save failed: "+error.message) }
 
   const { jsPDF } = window.jspdf
   const doc = new jsPDF()
@@ -98,8 +102,8 @@ async function generateInvoice(){
 
 async function loadDashboard(){
   const user = await getUser()
-  let { data: invoices } = await supabase.from("invoices").select("*").eq("user_id", user.id).order("created_at", {ascending:false})
-  let { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
+  let { data: invoices } = await supabaseClient.from("invoices").select("*").eq("user_id", user.id).order("created_at", {ascending:false})
+  let { data: profile } = await supabaseClient.from("profiles").select("*").eq("id", user.id).single()
   
   let usageText = profile?.is_pro ? "Pro User - Unlimited" : `Free: ${invoices?.length||0}/3 used`
   if(document.getElementById("usage")) document.getElementById("usage").innerText = usageText

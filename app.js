@@ -5,23 +5,47 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
 let currentUser = null;
 
 async function getUser(){
-  let { data: { user } } = await supabaseClient.auth.getUser()
-  if(!user){
-    let email = `user_${Date.now()}@quickinvoice.ng`
-    let { data, error } = await supabaseClient.auth.signUp({ email, password: "Password123!" })
-    if(error){ console.error(error); return null; }
-    user = data.user
-    
-    if(user){
-      await supabaseClient.from("profiles").insert({
-        id: user.id,
-        email: email,
-        business_name: document.getElementById("bizName")?.value || "My Business",
-        is_pro: false
-      })
-    }
+  // Try to get from localStorage first
+  let storedId = localStorage.getItem("qi_user_id")
+  if(storedId){
+    currentUser = { id: storedId }
+    return currentUser
   }
-  currentUser = user
+
+  try {
+    let { data: { user } } = await supabaseClient.auth.getUser()
+    if(user){
+      localStorage.setItem("qi_user_id", user.id)
+      currentUser = user
+      return user
+    }
+  } catch(e){ console.log("auth check failed, creating new user") }
+
+  // Create new anonymous user
+  let email = `user_${Date.now()}@quickinvoice.ng`
+  let { data, error } = await supabaseClient.auth.signUp({ email, password: "Password123!" })
+  
+  if(error){
+    console.error("Signup error:", error)
+    // Fallback - create local ID so app still works
+    let tempId = "user_" + Date.now()
+    localStorage.setItem("qi_user_id", tempId)
+    currentUser = { id: tempId }
+    return currentUser
+  }
+  
+  let user = data.user
+  if(user){
+    localStorage.setItem("qi_user_id", user.id)
+    currentUser = user
+    // Try to create profile, but don't fail if it errors
+    await supabaseClient.from("profiles").insert({
+      id: user.id,
+      email: email,
+      business_name: "My Business",
+      is_pro: false
+    }).then(()=>{}).catch(()=>{})
+  }
   return user
 }
 

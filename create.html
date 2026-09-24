@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Create Invoice</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+<nav><h2>QuickInvoice</h2> <a href="dashboard.html">Dashboard</a></nav>
+
+<div class="container">
+  <h2>Create Invoice</h2>
+  <input id="bizName" placeholder="Your Business Name" />
+  <input id="clientName" placeholder="Client Name" />
+  <input id="clientPhone" placeholder="Client Phone" />
+  
+  <div id="items">
+    <div class="item-row">
+      <input placeholder="Item (e.g. Logo design)" class="item-name">
+      <input type="number" placeholder="Qty" class="item-qty" value="1">
+      <input type="number" placeholder="Price" class="item-price">
+    </div>
+  </div>
+  <button onclick="addItem()">+ Add Item</button>
+  
+  <h3 id="totalDisplay">Total: ₦0</h3>
+  
+  <button class="btn" onclick="generateInvoice()">Generate & Save Invoice</button>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard - QuickInvoice</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<nav><h2>QuickInvoice</h2> <a href="index.html">Home</a></nav>
+
+<div class="container">
+  <h2>My Invoices</h2>
+  <p id="usage">Loading...</p>
+  <a class="btn" href="create.html">+ New Invoice</a>
+  <a class="btn-outline" href="https://paystack.com/pay/your-link" target="_blank">Upgrade to Pro ₦3,000</a>
+  
+  <div id="invoiceList" class="list"></div>
+</div>
+
+<script src="app.js"></script>
+<script>loadDashboard()</script>
+</body>
+</html>

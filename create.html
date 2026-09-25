@@ -6,6 +6,7 @@
 <title>Create Invoice - QuickInvoice NG</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://js.paystack.co/v1/inline.js"></script>
 <style>
 body{font-family:system-ui,sans-serif;max-width:600px;margin:auto;padding:20px;background:#f8f9fb}
 input{width:100%;padding:12px;margin:6px 0;border-radius:10px;border:1px solid #ddd;box-sizing:border-box}
@@ -19,6 +20,7 @@ input{width:100%;padding:12px;margin:6px 0;border-radius:10px;border:1px solid #
 <body>
 
 <h2>Create Invoice</h2>
+<div id="planStatus" style="background:#eef;padding:10px;border-radius:10px;margin-bottom:15px;font-size:14px"></div>
 
 <label><b>Your Business Logo (optional - just for you)</b></label>
 <input type="file" id="logoFile" accept="image/*" onchange="loadLogo(event)">
@@ -46,6 +48,67 @@ input{width:100%;padding:12px;margin:6px 0;border-radius:10px;border:1px solid #
 <script>
 const supa = window.supabase.createClient("https://owsismprvbndwlaktohz.supabase.co","sb_publishable_8auPuaDH5Iq65d_6LwPEKQ_yilaScba")
 
+// --- PAYSTACK MONTHLY SUBSCRIPTION LOGIC ---
+const PRO_PRICE = 3000
+const FREE_LIMIT = 3
+const PAYSTACK_KEY = "pk_live_f5336ea9deef3d7c492b102600f02716f38adaed"
+
+function getInvoiceCount(){ return parseInt(localStorage.getItem("qi_count")||"0") }
+
+function isProUser(){
+  let expiry = localStorage.getItem("qi_pro_expiry")
+  if(!expiry) return false
+  if(new Date() > new Date(expiry)){
+    localStorage.removeItem("qi_pro")
+    localStorage.removeItem("qi_pro_expiry")
+    return false
+  }
+  return localStorage.getItem("qi_pro") === "yes"
+}
+function getDaysLeft(){
+  let expiry = localStorage.getItem("qi_pro_expiry")
+  if(!expiry) return 0
+  let diff = new Date(expiry) - new Date()
+  return Math.ceil(diff / (1000*60*60*24))
+}
+function payForPro(){
+  let email = prompt("Enter your email for Pro receipt:")
+  if(!email) return
+  let handler = PaystackPop.setup({
+    key: PAYSTACK_KEY,
+    email: email,
+    amount: PRO_PRICE * 100,
+    currency: "NGN",
+    ref: "QI-PRO-"+Date.now(),
+    callback: function(res){
+      let expiryDate = new Date()
+      expiryDate.setDate(expiryDate.getDate() + 30)
+      localStorage.setItem("qi_pro","yes")
+      localStorage.setItem("qi_pro_expiry", expiryDate.toISOString())
+      alert("Pro unlocked for 30 days! Expires: "+expiryDate.toLocaleDateString()+"\nRef: "+res.reference)
+      updatePlanUI()
+    },
+    onClose: function(){ alert("Payment cancelled") }
+  })
+  handler.openIframe()
+}
+function updatePlanUI(){
+ let c=getInvoiceCount()
+ let el=document.getElementById("planStatus")
+ if(!el) return
+ if(isProUser()){
+   el.innerHTML=`✅ <b>Pro Monthly</b> - ${getDaysLeft()} days left (expires ${new Date(localStorage.getItem("qi_pro_expiry")).toLocaleDateString()}) - Unlimited`
+ } else {
+   let left = FREE_LIMIT - c
+   if(left <=0){
+     el.innerHTML=`❌ <b>Free limit reached (3/3)</b> <button onclick="payForPro()" style="margin-left:10px;background:#000;color:white;border:none;padding:8px 12px;border-radius:8px">Renew Pro ₦${PRO_PRICE}/month</button>`
+   } else {
+     el.innerHTML=`🆓 <b>Free:</b> ${c}/${FREE_LIMIT} used - ${left} left <button onclick="payForPro()" style="margin-left:10px;background:#00C3F7;color:white;border:none;padding:5px 10px;border-radius:6px">Go Pro ₦${PRO_PRICE}/mo</button>`
+   }
+ }
+}
+// --- END PAYSTACK LOGIC ---
+
 function getId(){
  let id=localStorage.getItem("qi_id")
  if(!id){id="user_"+Date.now(); localStorage.setItem("qi_id",id)}
@@ -64,6 +127,7 @@ window.onload = function(){
    img.style.display = "block"
  }
  calc()
+ updatePlanUI()
 }
 
 document.getElementById("biz").addEventListener("input", e=>localStorage.setItem("biz_name", e.target.value))
@@ -101,6 +165,13 @@ function calc(){
 }
 
 async function gen(){
+ if(!isProUser() && getInvoiceCount() >= FREE_LIMIT){
+   if(confirm("You have used your 3 free invoices!\n\nPay ₦"+PRO_PRICE+" to unlock unlimited for 30 days?\n\nClick OK to pay with Paystack")){
+     payForPro()
+   }
+   return
+ }
+
  let biz=document.getElementById("biz").value||"My Business"
  let client=document.getElementById("client").value
  if(!client) return alert("Enter client name")
@@ -157,7 +228,17 @@ async function gen(){
  doc.text("Powered by QuickInvoice.ng",14,y+6)
 
  doc.save("Invoice-"+client+".pdf")
- alert("Invoice PDF downloaded!")
+
+ if(!isProUser()){
+   let c = getInvoiceCount()
+   localStorage.setItem("qi_count", c+1)
+   updatePlanUI()
+   let left = FREE_LIMIT - (c+1)
+   if(left > 0) alert("Invoice PDF downloaded! "+left+" free left")
+   else alert("Invoice PDF downloaded! That was your last free. Next one needs Pro ₦3k/month")
+ } else {
+   alert("Invoice PDF downloaded!")
+ }
 }
 </script>
 </body>

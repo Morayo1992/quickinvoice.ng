@@ -3,26 +3,31 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Create Invoice</title>
+<title>Create Invoice - QuickInvoice NG</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
-body{font-family:sans-serif;max-width:600px;margin:auto;padding:20px}
-input{width:100%;padding:12px;margin:8px 0;border-radius:10px;border:1px solid #ccc;box-sizing:border-box}
+body{font-family:system-ui,sans-serif;max-width:600px;margin:auto;padding:20px;background:#f8f9fb}
+input{width:100%;padding:12px;margin:6px 0;border-radius:10px;border:1px solid #ddd;box-sizing:border-box}
 .row{display:flex;gap:8px}
 .row input{flex:1}
-#total{font-weight:bold;font-size:20px;margin:15px 0}
-button{padding:10px 15px;cursor:pointer}
-.gen{width:100%;background:black;color:white;padding:15px;border-radius:10px;border:none;font-size:16px;font-weight:bold}
+#total{font-weight:bold;font-size:22px;margin:15px 0}
+.gen{width:100%;background:#000;color:#fff;padding:16px;border-radius:12px;border:none;font-size:16px;font-weight:bold;cursor:pointer}
+.small{font-size:12px;color:#666;margin:2px 0 10px 0}
 </style>
 </head>
 <body>
 
 <h2>Create Invoice</h2>
 
+<label><b>Your Business Logo (optional - just for you)</b></label>
+<input type="file" id="logoFile" accept="image/*" onchange="loadLogo(event)">
+<p class="small">Upload logo once, it will auto-show on all your future invoices. Each user has their own logo.</p>
+<img id="logoPreview" style="max-width:120px;max-height:80px;display:none;border-radius:8px;border:1px solid #ddd;margin-bottom:10px">
+
 <input id="biz" placeholder="Business Name e.g. moregalleries2">
 <input id="client" placeholder="Client Name e.g. morayo">
-<input id="phone" placeholder="Client Phone">
+<input id="phone" placeholder="Client Phone (optional)">
 
 <div id="items">
  <div class="row">
@@ -32,8 +37,10 @@ button{padding:10px 15px;cursor:pointer}
  </div>
 </div>
 
-<button onclick="add()" style="margin-top:10px">+ Add Item</button>
+<button onclick="add()" style="margin:10px 0;padding:8px 14px;border-radius:8px;border:1px solid #ccc">+ Add Item</button>
+
 <div id="total">Total: ₦0</div>
+
 <button class="gen" onclick="gen()">Generate & Save Invoice</button>
 
 <script>
@@ -44,12 +51,44 @@ function getId(){
  if(!id){id="user_"+Date.now(); localStorage.setItem("qi_id",id)}
  return id
 }
+
+let logoData = localStorage.getItem("qi_logo") || null
+
+// restore saved business and logo
+window.onload = function(){
+ let savedBiz = localStorage.getItem("biz_name")
+ if(savedBiz) document.getElementById("biz").value = savedBiz
+ if(logoData){
+   let img = document.getElementById("logoPreview")
+   img.src = logoData
+   img.style.display = "block"
+ }
+ calc()
+}
+
+document.getElementById("biz").addEventListener("input", e=>localStorage.setItem("biz_name", e.target.value))
+
+function loadLogo(e){
+  let file = e.target.files[0]
+  if(!file) return
+  let reader = new FileReader()
+  reader.onload = function(ev){
+    logoData = ev.target.result
+    localStorage.setItem("qi_logo", logoData)
+    let img = document.getElementById("logoPreview")
+    img.src = logoData
+    img.style.display = "block"
+  }
+  reader.readAsDataURL(file)
+}
+
 function add(){
  let d=document.createElement("div")
  d.className="row"
  d.innerHTML=`<input class="n" placeholder="Item"><input class="q" type="number" value="1" oninput="calc()"><input class="p" type="number" placeholder="Price" oninput="calc()">`
  document.getElementById("items").appendChild(d)
 }
+
 function calc(){
  let qs=document.querySelectorAll(".q")
  let ps=document.querySelectorAll(".p")
@@ -60,6 +99,7 @@ function calc(){
  document.getElementById("total").innerText="Total: ₦"+t.toLocaleString()
  return t
 }
+
 async function gen(){
  let biz=document.getElementById("biz").value||"My Business"
  let client=document.getElementById("client").value
@@ -76,35 +116,49 @@ async function gen(){
   if(price>0){items.push({name,qty,price}); total+=qty*price}
  }
  if(total==0) return alert("Enter price for at least 1 item")
- // save
+
  try{
    await supa.from("invoices").insert({user_id:getId(),client_name:client,items:items,total:total,invoice_number:"QI-"+Date.now().toString().slice(-5)})
- }catch(e){console.log("save error",e)}
+ }catch(e){console.log(e)}
 
- // PDF with TABLE
  const {jsPDF}=window.jspdf
  const doc=new jsPDF()
- doc.setFontSize(18); doc.text(biz,14,20)
- doc.setFontSize(11); doc.text("Client: "+client,14,30)
- doc.text("Date: "+new Date().toLocaleDateString(),14,36)
- // table header
+ doc.setFontSize(12)
+
+ if(logoData){
+   try{doc.addImage(logoData,"PNG",14,10,30,20)}catch(err){try{doc.addImage(logoData,"JPEG",14,10,30,20)}catch(e2){}}
+   doc.setFontSize(18); doc.text(biz,50,20)
+   doc.setFontSize(11); doc.text("Client: "+client,50,28)
+   doc.text("Date: "+new Date().toLocaleDateString(),50,34)
+ } else {
+   doc.setFontSize(18); doc.text(biz,14,20)
+   doc.setFontSize(11); doc.text("Client: "+client,14,28)
+   doc.text("Date: "+new Date().toLocaleDateString(),14,34)
+ }
+
  let y=50
  doc.setFillColor(0,0,0); doc.rect(14,y-7,182,9,"F")
- doc.setTextColor(255,255,255); doc.text("Item",15,y); doc.text("Qty",105,y); doc.text("Price",130,y); doc.text("Amount",160,y)
- doc.setTextColor(0,0,0); y+=10
+ doc.setTextColor(255,255,255); doc.setFontSize(11)
+ doc.text("Item",15,y); doc.text("Qty",105,y); doc.text("Price",130,y); doc.text("Amount",160,y)
+ doc.setTextColor(0,0,0)
+ y+=10
  items.forEach(it=>{
-  doc.text(it.name.substring(0,30),15,y)
+  doc.text(it.name.substring(0,35),15,y)
   doc.text(String(it.qty),105,y)
   doc.text("N"+it.price.toLocaleString(),130,y)
   doc.text("N"+(it.qty*it.price).toLocaleString(),160,y)
   y+=8
+  doc.setDrawColor(230); doc.line(14,y-3,196,y-3)
  })
- y+=5; doc.setFontSize(14); doc.text("TOTAL: N"+total.toLocaleString(),14,y)
+ y+=8
+ doc.setFontSize(14); doc.text("TOTAL: N"+total.toLocaleString(),14,y)
+ y+=10; doc.setFontSize(10); doc.setTextColor(100)
+ doc.text("Thank you for your business!",14,y)
+ doc.text("Powered by QuickInvoice.ng",14,y+6)
+
  doc.save("Invoice-"+client+".pdf")
- alert("Done! PDF downloaded")
+ alert("Invoice PDF downloaded!")
 }
-let s=localStorage.getItem("biz_name"); if(s) document.getElementById("biz").value=s
-document.getElementById("biz").addEventListener("input",e=>localStorage.setItem("biz_name",e.target.value))
 </script>
 </body>
 </html>

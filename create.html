@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QuickInvoice NG</title>
 <script src="https://js.paystack.co/v1/inline.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -10,173 +9,127 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 body{font-family:system-ui;padding:15px;max-width:600px;margin:auto;background:#f9f9f9}
-input,textarea{width:100%;padding:10px;margin:6px 0;border:1px solid #ddd;border-radius:8px;box-sizing:border-box}
-table{width:100%;border-collapse:collapse;margin-top:10px}
-th,td{border:1px solid #eee;padding:6px;text-align:left;background:#fff}
-#invoicePreview{border:1px solid #000;padding:20px;margin-top:20px;background:#fff;min-height:400px}
+input{width:100%;padding:10px;margin:6px 0;border:1px solid #ddd;border-radius:8px;box-sizing:border-box}
+#invoicePreview{border:1px solid #000;padding:20px;margin-top:20px;background:#fff}
 .banner{background:#fef3c7;padding:10px;text-align:center;border-radius:8px;margin-bottom:10px}
 .btn{padding:12px;border:none;border-radius:8px;color:#fff;cursor:pointer;width:100%;margin-top:8px;font-weight:bold}
-.logo-preview{max-width:80px;max-height:80px;display:none;margin-bottom:10px}
+.logo-preview{max-width:80px;max-height:80px}
 </style>
 </head>
 <body>
-
-<div id="freeBanner" class="banner">🆓 Free: <span id="countLeft">3</span>/3 left</div>
-
+<div id="freeBanner" class="banner">Free: <span id="countLeft">3</span>/3 left</div>
 <h2>Create Invoice</h2>
-
-<label><strong>Business Logo (optional)</strong></label>
-<input type="file" id="logoUpload" accept="image/*">
-
-<label><strong>Your Business Name</strong></label>
-<input id="bizName" placeholder="e.g. Tunde Fashion Hub" oninput="updatePreview()">
-
-<label><strong>Client Name</strong></label>
-<input id="clientName" placeholder="Client Name" oninput="updatePreview()">
-
-<label><strong>Client Email (for Paystack receipt)</strong></label>
-<input id="clientEmail" placeholder="client@gmail.com">
-
+<label><b>Business Logo</b></label><input type="file" id="logoUpload" accept="image/*">
+<label><b>Your Business Name</b></label><input id="bizName" placeholder="e.g. Tunde Fashion Hub">
+<label><b>Client Name</b></label><input id="clientName" placeholder="Client Name">
+<label><b>Client Email (for Paystack receipt)</b></label><input id="clientEmail" placeholder="client@gmail.com">
 <h3>Items</h3>
 <div id="itemsContainer"></div>
-<button onclick="addItem()" style="padding:8px 14px;margin-top:8px;background:#e5e7eb;border:none;border-radius:6px;cursor:pointer">+ Add Item</button>
-
+<button id="addBtn" type="button" style="padding:8px 14px;margin-top:8px;background:#e5e7eb;border:none;border-radius:6px;cursor:pointer">+ Add Item</button>
 <div style="text-align:right;margin-top:15px;font-weight:bold;font-size:18px">Total: ₦<span id="totalDisplay">0</span></div>
-
-<h3 style="margin-top:20px">Signature</h3>
-<label>Upload your signature image (from phone gallery)</label>
-<input type="file" id="sigUpload" accept="image/*">
-<p style="font-size:12px;color:gray">It will appear at bottom of invoice above "Seller Signature" line.</p>
-
+<h3>Signature</h3><input type="file" id="sigUpload" accept="image/*">
 <div id="invoicePreview">
-<div style="display:flex;justify-content:space-between;align-items:start">
-<div>
-<img id="pLogo" class="logo-preview" style="display:none">
-<h3 id="pBizName" style="margin:0">Business Name</h3>
-</div>
-<div style="text-align:right;font-size:12px">Date: <span id="pDate"></span></div>
-</div>
-<hr>
-<p>Bill To: <strong><span id="pClient">-</span></strong></p>
-<div id="pItems"></div>
+<div style="display:flex;justify-content:space-between"><div><img id="pLogo" style="max-width:80px;display:none"><h3 id="pBizName" style="margin:0">Business Name</h3></div><div style="font-size:12px">Date: <span id="pDate"></span></div></div><hr>
+<p>Bill To: <strong><span id="pClient">-</span></strong></p><div id="pItems"></div>
 <p style="text-align:right;margin-top:15px"><strong>Total: ₦<span id="pTotal">0</span></strong></p>
-
-<div id="pSigArea" style="margin-top:50px;display:flex;flex-direction:column;align-items:flex-start">
-<img id="pSigImg" style="max-width:130px;max-height:60px;display:none;margin-bottom:5px">
-<div>__________________</div>
-<div style="font-size:12px">Seller Signature</div>
+<div style="margin-top:50px"><img id="pSigImg" style="max-width:130px;max-height:60px;display:none"><div>__________________</div><div style="font-size:12px">Seller Signature</div></div>
 </div>
-</div>
-
 <button class="btn" style="background:#16a34a" onclick="handleGenerate()">Generate & Save Invoice</button>
-<button class="btn" style="background:#2563eb" onclick="downloadPDF()">Download PDF (to Files)</button>
-<button class="btn" style="background:#7c3aed" onclick="downloadJPG()">Download JPG (to Gallery)</button>
+<button class="btn" style="background:#2563eb" onclick="downloadPDF()">Download PDF</button>
+<button class="btn" style="background:#7c3aed" onclick="downloadJPG()">Download JPG</button>
 
 <script>
 const SUPA_URL = "https://owsismprvbndwlaktohz.supabase.co";
 const SUPA_KEY = "sb_publishable_8auPuaDH5Iq65d_6LwPEKQ_yilaScba";
 const supabaseClient = window.supabase.createClient(SUPA_URL, SUPA_KEY);
-
 let items = [{name:"",desc:"",qty:1,price:0}];
 
 function getUserId(){
   let id=localStorage.getItem("qi_uid");
-  if(!id){ id="user_"+Math.random().toString(36).substring(2,9); localStorage.setItem("qi_uid",id);}
+  if(!id){ id="user_"+Math.random().toString(36).substring(2,9); localStorage.setItem("qi_uid",id); }
   return id;
 }
 const userId = getUserId();
 
 async function checkProStatus(){
   try{
-    const { data: sub } = await supabaseClient.from("subscriptions").select("*").eq("user_id", userId).maybeSingle();
-    if (sub && sub.is_pro && new Date(sub.expiry) > new Date()) {
-        localStorage.setItem("qi_pro","yes");
-        localStorage.setItem("qi_pro_expiry", sub.expiry);
-        document.getElementById("freeBanner").innerHTML = "✅ Pro Active - Unlimited";
-        return true;
+    const {data:sub}=await supabaseClient.from("subscriptions").select("*").eq("user_id",userId).maybeSingle();
+    if(sub && sub.is_pro && new Date(sub.expiry) > new Date()){
+      localStorage.setItem("qi_pro","yes");
+      document.getElementById("freeBanner").innerHTML="✅ Pro Active - Unlimited";
+      return true;
     }
-  }catch(e){ console.log(e); }
+  }catch(e){}
   let count=parseInt(localStorage.getItem("qi_count")||"0");
-  document.getElementById("freeBanner").innerHTML = `🆓 Free: <span id="countLeft">${Math.max(0,3-count)}</span>/3 left`;
-  return count < 3;
+  document.getElementById("freeBanner").innerHTML='Free: <span id="countLeft">'+Math.max(0,3-count)+'</span>/3 left';
+  return count<3;
 }
 
-function addItem(){
+window.addItem = function(){
   items.push({name:"",desc:"",qty:1,price:0});
   renderItems();
 }
 
 function renderItems(){
-  const cont = document.getElementById("itemsContainer");
+  const cont=document.getElementById("itemsContainer");
   cont.innerHTML="";
-  for(let i=0;i<items.length;i++){
-    const it = items[i];
-    const row = document.createElement("div");
+  items.forEach(function(it,idx){
+    const row=document.createElement("div");
     row.style.cssText="display:flex;gap:5px;margin-bottom:6px;background:#fff;padding:8px;border-radius:8px;border:1px solid #eee";
-    row.innerHTML='<input id="in_'+i+'_n" placeholder="Item name" style="flex:2;padding:8px;border:1px solid #ddd;border-radius:6px"><input id="id_'+i+'_d" placeholder="Desc" style="flex:2;padding:8px;border:1px solid #ddd;border-radius:6px"><input id="iq_'+i+'" type="number" placeholder="Qty" style="flex:1;padding:8px;border:1px solid #ddd;border-radius:6px"><input id="ip_'+i+'" type="number" placeholder="Price" style="flex:1;padding:8px;border:1px solid #ddd;border-radius:6px"><button id="ib_'+i+'" style="background:#fee2e2;border:none;border-radius:5px">X</button>';
+    const n=document.createElement("input"); n.placeholder="Item name"; n.value=it.name; n.style.flex="2";
+    n.addEventListener("input",function(e){ items[idx].name=e.target.value; updatePreview(); });
+    const d=document.createElement("input"); d.placeholder="Desc"; d.value=it.desc; d.style.flex="2";
+    d.addEventListener("input",function(e){ items[idx].desc=e.target.value; updatePreview(); });
+    const q=document.createElement("input"); q.type="number"; q.value=it.qty; q.style.flex="1";
+    q.addEventListener("input",function(e){ items[idx].qty=parseInt(e.target.value)||0; updatePreview(); });
+    const p=document.createElement("input"); p.type="number"; p.value=it.price; p.style.flex="1";
+    p.addEventListener("input",function(e){ items[idx].price=parseFloat(e.target.value)||0; updatePreview(); });
+    const b=document.createElement("button"); b.innerText="X"; b.style.background="#fee2e2"; b.style.border="none"; b.style.borderRadius="5px";
+    b.addEventListener("click",function(){ items.splice(idx,1); if(items.length===0) items.push({name:"",desc:"",qty:1,price:0}); renderItems(); });
+    row.appendChild(n); row.appendChild(d); row.appendChild(q); row.appendChild(p); row.appendChild(b);
     cont.appendChild(row);
-    document.getElementById("in_"+i+"_n").value = it.name;
-    document.getElementById("id_"+i+"_d").value = it.desc;
-    document.getElementById("iq_"+i).value = it.qty;
-    document.getElementById("ip_"+i).value = it.price;
-
-    document.getElementById("in_"+i+"_n").addEventListener("input", function(e){ items[i].name=e.target.value; updatePreview(); });
-    document.getElementById("id_"+i+"_d").addEventListener("input", function(e){ items[i].desc=e.target.value; updatePreview(); });
-    document.getElementById("iq_"+i).addEventListener("input", function(e){ items[i].qty=parseInt(e.target.value)||0; updatePreview(); });
-    document.getElementById("ip_"+i).addEventListener("input", function(e){ items[i].price=parseFloat(e.target.value)||0; updatePreview(); });
-    document.getElementById("ib_"+i).addEventListener("click", (function(idx){ return function(){ items.splice(idx,1); renderItems(); updatePreview(); }; })(i));
-  }
+  });
   updatePreview();
 }
 
-function getTotal(){ return items.reduce((s,it)=>s+(it.qty*it.price),0); }
+function getTotal(){ return items.reduce(function(s,it){ return s+(it.qty*it.price); },0); }
 
 function updatePreview(){
-  document.getElementById("pBizName").innerText = document.getElementById("bizName").value || "Business Name";
-  document.getElementById("pClient").innerText = document.getElementById("clientName").value || "-";
-  document.getElementById("pDate").innerText = new Date().toLocaleDateString();
-  let html="<table style='width:100%'><tr><th>Item</th><th>Qty</th><th>Amount</th></tr>";
-  items.forEach(it=>{ if(it.name||it.price) html+=`<tr><td>${it.name}<br><small style='color:gray'>${it.desc||''}</small></td><td>${it.qty}</td><td>₦${(it.qty*it.price).toLocaleString()}</td></tr>`; });
+  document.getElementById("pBizName").innerText=document.getElementById("bizName").value||"Business Name";
+  document.getElementById("pClient").innerText=document.getElementById("clientName").value||"-";
+  document.getElementById("pDate").innerText=new Date().toLocaleDateString();
+  let html="<table style='width:100%;border-collapse:collapse'><tr><th style='border:1px solid #eee'>Item</th><th style='border:1px solid #eee'>Qty</th><th style='border:1px solid #eee'>Amount</th></tr>";
+  items.forEach(function(it){ if(it.name||it.price){ html+="<tr><td style='border:1px solid #eee;padding:4px'>"+it.name+"<br><small style='color:gray'>"+(it.desc||'')+"</small></td><td style='border:1px solid #eee'>"+it.qty+"</td><td style='border:1px solid #eee'>₦"+(it.qty*it.price).toLocaleString()+"</td></tr>"; } });
   html+="</table>";
   document.getElementById("pItems").innerHTML=html;
-  document.getElementById("totalDisplay").innerText=getTotal().toLocaleString();
-  document.getElementById("pTotal").innerText=getTotal().toLocaleString();
+  const tot=getTotal().toLocaleString();
+  document.getElementById("totalDisplay").innerText=tot;
+  document.getElementById("pTotal").innerText=tot;
 }
 
-document.getElementById("logoUpload").addEventListener("change",function(e){
-  const file = e.target.files[0];
-  if(!file) return;
-  const r=new FileReader();
-  r.onload=function(ev){
-    let img=document.getElementById("pLogo");
-    img.src=ev.target.result;
-    img.style.display="block";
-  };
-  r.readAsDataURL(file);
-});
+document.getElementById("addBtn").addEventListener("click", function(){ window.addItem(); });
+document.getElementById("bizName").addEventListener("input", updatePreview);
+document.getElementById("clientName").addEventListener("input", updatePreview);
 
+document.getElementById("logoUpload").addEventListener("change",function(e){
+  const file=e.target.files[0]; if(!file) return;
+  const r=new FileReader(); r.onload=function(ev){ const img=document.getElementById("pLogo"); img.src=ev.target.result; img.style.display="block"; }; r.readAsDataURL(file);
+});
 document.getElementById("sigUpload").addEventListener("change",function(e){
-  const file = e.target.files[0];
-  if(!file) return;
-  const r=new FileReader();
-  r.onload=function(ev){
-    let img=document.getElementById("pSigImg");
-    img.src=ev.target.result;
-    img.style.display="block";
-  };
-  r.readAsDataURL(file);
+  const file=e.target.files[0]; if(!file) return;
+  const r=new FileReader(); r.onload=function(ev){ const img=document.getElementById("pSigImg"); img.src=ev.target.result; img.style.display="block"; }; r.readAsDataURL(file);
 });
 
 async function handleGenerate(){
   let count=parseInt(localStorage.getItem("qi_count")||"0");
-  let isProLocal = localStorage.getItem("qi_pro")==="yes";
+  let isProLocal=localStorage.getItem("qi_pro")==="yes";
   if(!isProLocal && count>=3){ payWithPaystack(); return; }
   try{
-    await supabaseClient.from("invoices").insert([{user_id:userId, business_name:document.getElementById("bizName").value, client_name:document.getElementById("clientName").value, total:getTotal(), items:items}]);
+    await supabaseClient.from("invoices").insert([{user_id:userId,business_name:document.getElementById("bizName").value,client_name:document.getElementById("clientName").value,total:getTotal(),items:items}]);
   }catch(e){ console.log(e); }
   localStorage.setItem("qi_count", String(count+1));
   await checkProStatus();
-  alert("Invoice saved!");
+  alert("Invoice saved! "+(3-(count+1))+" free left");
 }
 
 function payWithPaystack(){
@@ -184,17 +137,17 @@ function payWithPaystack(){
   let handler=PaystackPop.setup({
     key:'pk_test_60231c395a4e19b0be16d06b4b9417c09c2debde',
     email:email,
-    amount:3000 * 100,
+    amount:3000*100,
     currency:'NGN',
     ref:'QI_'+Math.floor(Math.random()*1000000000+1),
     onClose:function(){ alert('Payment closed'); },
-    callback: function(response){
+    callback:function(response){
       (async function(){
-        const expiry = new Date(Date.now()+30*24*60*60*1000).toISOString();
-        const { error } = await supabaseClient.from("subscriptions").upsert({user_id:userId,is_pro:true,expiry:expiry},{onConflict:'user_id'});
+        const expiry=new Date(Date.now()+30*24*60*60*1000).toISOString();
+        const {error}=await supabaseClient.from("subscriptions").upsert({user_id:userId,is_pro:true,expiry:expiry},{onConflict:'user_id'});
         if(error){ alert(error.message); return; }
         localStorage.setItem("qi_pro","yes");
-        localStorage.setItem("qi_pro_expiry", expiry);
+        localStorage.setItem("qi_pro_expiry",expiry);
         localStorage.setItem("qi_count","0");
         alert('Payment success! Pro activated ₦3000');
         location.reload();
@@ -203,3 +156,11 @@ function payWithPaystack(){
   });
   handler.openIframe();
 }
+
+function downloadPDF(){ const jsPDF=window.jspdf.jsPDF; html2canvas(document.getElementById("invoicePreview"),{scale:2}).then(function(c){ const d=c.toDataURL('image/png'); const pdf=new jsPDF(); const w=pdf.internal.pageSize.getWidth(); const h=(c.height*w)/c.width; pdf.addImage(d,'PNG',0,0,w,h); pdf.save('invoice_'+Date.now()+'.pdf'); }); }
+function downloadJPG(){ html2canvas(document.getElementById("invoicePreview"),{scale:2}).then(function(c){ let a=document.createElement('a'); a.download='invoice_'+Date.now()+'.jpg'; a.href=c.toDataURL('image/jpeg',0.95); a.click(); }); }
+
+renderItems(); checkProStatus(); updatePreview();
+</script>
+</body>
+</html>

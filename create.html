@@ -101,22 +101,31 @@ async function checkProStatus(){
   return count < 3;
 }
 
-function addItem(){ items.push({name:"",desc:"",qty:1,price:0}); renderItems(); }
+function addItem(){
+  items.push({name:"",desc:"",qty:1,price:0});
+  renderItems();
+}
 
 function renderItems(){
   const cont = document.getElementById("itemsContainer");
   cont.innerHTML="";
-  items.forEach((it,i)=>{
+  for(let i=0;i<items.length;i++){
+    const it = items[i];
     const row = document.createElement("div");
-    row.style.cssText="display:flex;gap:5px;margin-bottom:6px;flex-wrap:wrap;background:#fff;padding:8px;border-radius:8px;border:1px solid #eee";
-    row.innerHTML=`
-      <input style="flex:2" placeholder="Item name" value="${it.name}" oninput="items[${i}].name=this.value; updatePreview()">
-      <input style="flex:2" placeholder="Desc" value="${it.desc}" oninput="items[${i}].desc=this.value; updatePreview()">
-      <input type="number" style="flex:1" value="${it.qty}" oninput="items[${i}].qty=parseInt(this.value)||0; updatePreview()">
-      <input type="number" style="flex:1" value="${it.price}" oninput="items[${i}].price=parseFloat(this.value)||0; updatePreview()">
-      <button onclick="items.splice(${i},1);renderItems();updatePreview()" style="background:#fee2e2;border:none;border-radius:5px;padding:5px 8px">X</button>`;
+    row.style.cssText="display:flex;gap:5px;margin-bottom:6px;background:#fff;padding:8px;border-radius:8px;border:1px solid #eee";
+    row.innerHTML='<input id="in_'+i+'_n" placeholder="Item name" style="flex:2;padding:8px;border:1px solid #ddd;border-radius:6px"><input id="id_'+i+'_d" placeholder="Desc" style="flex:2;padding:8px;border:1px solid #ddd;border-radius:6px"><input id="iq_'+i+'" type="number" placeholder="Qty" style="flex:1;padding:8px;border:1px solid #ddd;border-radius:6px"><input id="ip_'+i+'" type="number" placeholder="Price" style="flex:1;padding:8px;border:1px solid #ddd;border-radius:6px"><button id="ib_'+i+'" style="background:#fee2e2;border:none;border-radius:5px">X</button>';
     cont.appendChild(row);
-  });
+    document.getElementById("in_"+i+"_n").value = it.name;
+    document.getElementById("id_"+i+"_d").value = it.desc;
+    document.getElementById("iq_"+i).value = it.qty;
+    document.getElementById("ip_"+i).value = it.price;
+
+    document.getElementById("in_"+i+"_n").addEventListener("input", function(e){ items[i].name=e.target.value; updatePreview(); });
+    document.getElementById("id_"+i+"_d").addEventListener("input", function(e){ items[i].desc=e.target.value; updatePreview(); });
+    document.getElementById("iq_"+i).addEventListener("input", function(e){ items[i].qty=parseInt(e.target.value)||0; updatePreview(); });
+    document.getElementById("ip_"+i).addEventListener("input", function(e){ items[i].price=parseFloat(e.target.value)||0; updatePreview(); });
+    document.getElementById("ib_"+i).addEventListener("click", (function(idx){ return function(){ items.splice(idx,1); renderItems(); updatePreview(); }; })(i));
+  }
   updatePreview();
 }
 

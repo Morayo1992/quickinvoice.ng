@@ -121,15 +121,11 @@ document.getElementById("sigUpload").addEventListener("change",function(e){
 });
 
 async function handleGenerate(){
-  let count=parseInt(localStorage.getItem("qi_count")||"0");
-  let isProLocal=localStorage.getItem("qi_pro")==="yes";
-  if(!isProLocal && count>=3){ payWithPaystack(); return; }
   try{
     await supabaseClient.from("invoices").insert([{user_id:userId,business_name:document.getElementById("bizName").value,client_name:document.getElementById("clientName").value,total:getTotal(),items:items}]);
   }catch(e){ console.log(e); }
-  localStorage.setItem("qi_count", String(count+1));
   await checkProStatus();
-  alert("Invoice saved! "+(3-(count+1))+" free left");
+  alert("Invoice saved!");
 }
 
 function payWithPaystack(){
@@ -164,6 +160,11 @@ function checkCanDownload(){
     alert("Free limit reached (3/3). Please upgrade to Pro ₦3000 to download.");
     payWithPaystack();
     return false;
+  }
+  if(!isPro){
+    count=count+1;
+    localStorage.setItem("qi_count", String(count));
+    document.getElementById("freeBanner").innerHTML='Free: <span id="countLeft">'+Math.max(0,3-count)+'</span>/3 left';
   }
   return true;
 }

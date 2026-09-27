@@ -179,30 +179,18 @@ function payWithPaystack(){
     currency:'NGN',
     ref:'QI_'+Math.floor(Math.random()*1000000000+1),
     onClose:function(){ alert('Payment closed'); },
-    callback: async function(response){
-      const expiry = new Date(Date.now()+30*24*60*60*1000).toISOString();
-      const { error } = await supabaseClient.from("subscriptions").upsert({
-        user_id: userId,
-        is_pro: true,
-        expiry: expiry
-      }, { onConflict: 'user_id' });
-      if(error){ alert(error.message); return; }
-      localStorage.setItem("qi_pro","yes");
-      localStorage.setItem("qi_pro_expiry", expiry);
-      localStorage.setItem("qi_count","0");
-      alert('Payment success! Pro activated for 30 days - ₦3000');
-      location.reload();
+    callback: function(response){
+      (async function(){
+        const expiry = new Date(Date.now()+30*24*60*60*1000).toISOString();
+        const { error } = await supabaseClient.from("subscriptions").upsert({user_id:userId,is_pro:true,expiry:expiry},{onConflict:'user_id'});
+        if(error){ alert(error.message); return; }
+        localStorage.setItem("qi_pro","yes");
+        localStorage.setItem("qi_pro_expiry", expiry);
+        localStorage.setItem("qi_count","0");
+        alert('Payment success! Pro activated ₦3000');
+        location.reload();
+      })();
     }
   });
   handler.openIframe();
 }
-
-function downloadPDF(){ const {jsPDF}=window.jspdf; html2canvas(document.getElementById("invoicePreview"),{scale:2}).then(c=>{ const d=c.toDataURL('image/png'); const pdf=new jsPDF(); const w=pdf.internal.pageSize.getWidth(); const h=(c.height*w)/c.width; pdf.addImage(d,'PNG',0,0,w,h); pdf.save('invoice_'+Date.now()+'.pdf'); }); }
-function downloadJPG(){ html2canvas(document.getElementById("invoicePreview"),{scale:2}).then(c=>{ let a=document.createElement('a'); a.download='invoice_'+Date.now()+'.jpg'; a.href=c.toDataURL('image/jpeg',0.95); a.click(); }); }
-
-renderItems();
-checkProStatus();
-document.getElementById("pDate").innerText = new Date().toLocaleDateString();
-</script>
-</body>
-</html>

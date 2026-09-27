@@ -81,81 +81,47 @@ let signatureDataUrl = "";
 let logoDataUrl = "";
 
 function getUserId(){ let id=localStorage.getItem("qi_uid"); if(!id){ id="user_"+Math.random().toString(36).substring(2,9); localStorage.setItem("qi_uid",id);} return id; }
+const userId = getUserId(); // <-- FIX 1: DEFINE THIS
 
 async function checkProStatus(){
-  const uid = getUserId();
   try{
     const { data: sub } = await supabaseClient
-  .from("subscriptions")
-  .select("*")
-  .eq("user_id", userId)
-  .maybeSingle();  // <-- not single()
+      .from("subscriptions")
+      .select("*")
+      .eq("user_id", userId) // now works
+      .maybeSingle();
 
     if (sub?.is_pro && new Date(sub.expiry) > new Date()) {
         localStorage.setItem("qi_pro","yes");
         localStorage.setItem("qi_pro_expiry", sub.expiry);
         document.getElementById("freeBanner").innerHTML = "✅ Pro Active - Unlimited";
         return true;
-    } else {
-      // not pro
-      let count=parseInt(localStorage.getItem("qi_count")||"0");
-      document.getElementById("freeBanner").innerHTML = `🆓 Free: <span id="countLeft">${Math.max(0,3-count)}</span>/3 left`;
-      return false;
     }
-  }catch(e){
-    // new user
-    let count=parseInt(localStorage.getItem("qi_count")||"0");
-    document.getElementById("freeBanner").innerHTML = `🆓 Free: <span id="countLeft">${Math.max(0,3-count)}</span>/3 left`;
-    return false;
-  }
+  }catch(e){ console.log(e) }
+  
+  let count=parseInt(localStorage.getItem("qi_count")||"0");
+  const left = Math.max(0,3-count);
+  document.getElementById("freeBanner").innerHTML = `🆓 Free: <span id="countLeft">${left}</span>/3 left`;
+  return left > 0;
 }
-
-// --- your items, logo, signature code remains same ---
-function addItem(){ items.push({name:"",desc:"",qty:1,price:0}); renderItems(); }
-function renderItems(){
-  const cont = document.getElementById("itemsContainer");
-  cont.innerHTML="";
-  items.forEach((it,i)=>{
-    const row = document.createElement("div");
-    row.style.cssText="display:flex;gap:5px;margin-bottom:6px;flex-wrap:wrap;background:#fff;padding:8px;border-radius:8px;border:1px solid #eee";
-    row.innerHTML=`
-      <input style="flex:2" placeholder="Item name" value="${it.name}" oninput="items[${i}].name=this.value; updatePreview()">
-      <input style="flex:2" placeholder="Desc" value="${it.desc}" oninput="items[${i}].desc=this.value; updatePreview()">
-      <input type="number" style="flex:1" value="${it.qty}" oninput="items[${i}].qty=parseInt(this.value)||0; updatePreview()">
-      <input type="number" style="flex:1" value="${it.price}" oninput="items[${i}].price=parseFloat(this.value)||0; updatePreview()">
-      <button onclick="items.splice(${i},1);renderItems();updatePreview()" style="background:#fee2e2;border:none;border-radius:5px;padding:5px 8px">X</button>`;
-    cont.appendChild(row);
-  });
-  updatePreview();
-}
-function getTotal(){ return items.reduce((s,it)=>s+(it.qty*it.price),0); }
-function updatePreview(){
-  document.getElementById("pBizName").innerText = document.getElementById("bizName").value || "Business Name";
-  document.getElementById("pClient").innerText = document.getElementById("clientName").value || "-";
-  document.getElementById("pDate").innerText = new Date().toLocaleDateString();
-  let html="<table style='width:100%'><tr><th>Item</th><th>Qty</th><th>Amount</th></tr>";
-  items.forEach(it=>{ if(it.name||it.price) html+=`<tr><td>${it.name}<br><small style='color:gray'>${it.desc||''}</small></td><td>${it.qty}</td><td>₦${(it.qty*it.price).toLocaleString()}</td></tr>`; });
-  html+="</table>";
-  document.getElementById("pItems").innerHTML=html;
-  document.getElementById("totalDisplay").innerText=getTotal().toLocaleString();
-  document.getElementById("pTotal").innerText=getTotal().toLocaleString();
-}
-document.getElementById("logoUpload").addEventListener("change",e=>{
-  const r=new FileReader(); r.onload=ev=>{ logoDataUrl=ev.target.result; let img=document.getElementById("pLogo"); img.src=logoDataUrl; img.style.display="block"; }; r.readAsDataURL(e.target.files[0]);
-});
-document.getElementById("sigUpload").addEventListener("change",e=>{
-  const r=new FileReader(); r.onload=ev=>{ signatureDataUrl=ev.target.result; let img=document.getElementById("pSigImg"); img.src=signatureDataUrl; img.style.display="block"; }; r.readAsDataURL(e.target.files[0]);
-});
 
 async function handleGenerate(){
   let count=parseInt(localStorage.getItem("qi_count")||"0");
-  let isPro = await checkProStatus();
-  // use local as quick check too
-  if(localStorage.getItem("qi_pro")!=="yes" && count>=3){ payWithPaystack(); return; }
-  try{ await supabaseClient.from("invoices").insert([{user_id:getUserId(), business_name:document.getElementById("bizName").value, client_name:document.getElementById("clientName").value, total:getTotal(), items:items}]); }catch(e){}
-  localStorage.setItem("qi_count",count+1);
-  checkProStatus();
-  alert("Invoice saved!");
+  let hasLeft = await checkProStatus();
+  let isProLocal = localStorage.getItem("qi_pro")==="yes";
+
+  if(!isProLocal && count>=3){ 
+    payWithPaystack(); 
+    return; 
+  }
+
+  try{ 
+    await supabaseClient.from("invoices").insert([{user_id:userId, business_name:document.getElementById("bizName").value, client_name:document.getElementById("clientName").value, total:getTotal(), items:items}]); 
+  }catch(e){ console.log("invoice save error", e) }
+
+  localStorage.setItem("qi_count", String(count+1));
+  await checkProStatus();
+  alert(`Invoice saved! ${2-count} free left`);
 }
 
 function payWithPaystack(){
@@ -163,35 +129,29 @@ function payWithPaystack(){
   let handler=PaystackPop.setup({
     key:'pk_test_60231c395a4e19b0be16d06b4b9417c09c2debde',
     email:email,
-    amount:300000,
+    amount:3000 * 100,
     currency:'NGN',
     ref:'QI_'+Math.floor(Math.random()*1000000000+1),
     onClose:()=>alert('Payment closed'),
     callback: async function(response){
-      // SAVE PRO TO SUPABASE - SECURE
       const expiry = new Date(Date.now()+30*24*60*60*1000).toISOString();
-
-await supabaseClient.from("subscriptions").upsert({ 
-  user_id: userId, 
-  is_pro: true, 
-  expiry: expiry 
-}, { onConflict: 'user_id' });
+      const { error } = await supabaseClient.from("subscriptions").upsert({ 
+        user_id: userId, // <-- FIX 2: now defined
+        is_pro: true, 
+        expiry: expiry 
+      }, { onConflict: 'user_id' });
+      
+      if(error){ alert("Supabase error: "+error.message); return; }
 
       localStorage.setItem("qi_pro","yes");
       localStorage.setItem("qi_pro_expiry", expiry);
       localStorage.setItem("qi_count","0");
-      alert('Payment success! Pro activated for 30 days');
+      alert('Payment success! Pro activated for 30 days - ₦3000');
       location.reload();
     }
   });
   handler.openIframe();
 }
-function downloadPDF(){ const {jsPDF}=window.jspdf; html2canvas(document.getElementById("invoicePreview"),{scale:2}).then(c=>{ const d=c.toDataURL('image/png'); const pdf=new jsPDF(); const w=pdf.internal.pageSize.getWidth(); const h=(c.height*w)/c.width; pdf.addImage(d,'PNG',0,0,w,h); pdf.save('invoice_'+Date.now()+'.pdf'); }); }
-function downloadJPG(){ html2canvas(document.getElementById("invoicePreview"),{scale:2}).then(c=>{ let a=document.createElement('a'); a.download='invoice_'+Date.now()+'.jpg'; a.href=c.toDataURL('image/jpeg',0.95); a.click(); }); }
-
-renderItems();
-checkProStatus();
-document.getElementById("pDate").innerText = new Date().toLocaleDateString();
 </script>
 </body>
 </html>

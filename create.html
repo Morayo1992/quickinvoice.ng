@@ -2,244 +2,174 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Create Invoice - QuickInvoice NG</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuickInvoice NG</title>
 <script src="https://js.paystack.co/v1/inline.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-body{font-family:system-ui,sans-serif;max-width:600px;margin:auto;padding:20px;background:#f8f9fb}
-input{width:100%;padding:12px;margin:6px 0;border-radius:10px;border:1px solid #ddd;box-sizing:border-box}
-.row{display:flex;gap:8px}
-.row input{flex:1}
-#total{font-weight:bold;font-size:22px;margin:15px 0}
-.gen{width:100%;background:#000;color:#fff;padding:16px;border-radius:12px;border:none;font-size:16px;font-weight:bold;cursor:pointer}
-.small{font-size:12px;color:#666;margin:2px 0 10px 0}
+body{font-family:system-ui;padding:15px;max-width:600px;margin:auto}
+input,textarea{width:100%;padding:10px;margin:6px 0;border:1px solid #ddd;border-radius:8px}
+table{width:100%;border-collapse:collapse;margin-top:10px}
+th,td{border:1px solid #eee;padding:8px;text-align:left}
+#invoicePreview{border:1px solid #000;padding:20px;margin-top:20px;background:#fff}
+.banner{background:#fef3c7;padding:10px;text-align:center;border-radius:8px;margin-bottom:10px}
+.btn{padding:12px;border:none;border-radius:8px;color:#fff;cursor:pointer;width:100%;margin-top:8px}
 </style>
 </head>
 <body>
 
+<div id="freeBanner" class="banner">🆓 Free: <span id="countLeft">3</span>/3 left</div>
+
 <h2>Create Invoice</h2>
-<div id="planStatus" style="background:#eef;padding:10px;border-radius:10px;margin-bottom:15px;font-size:14px"></div>
 
-<label><b>Your Business Logo (optional - just for you)</b></label>
-<input type="file" id="logoFile" accept="image/*" onchange="loadLogo(event)">
-<p class="small">Upload logo once, it will auto-show on all your future invoices. Each user has their own logo.</p>
-<img id="logoPreview" style="max-width:120px;max-height:80px;display:none;border-radius:8px;border:1px solid #ddd;margin-bottom:10px">
+<input id="bizName" placeholder="Your Business Name">
+<input id="clientName" placeholder="Client Name">
+<input id="clientEmail" placeholder="Client Email (for payment)">
 
-<input id="biz" placeholder="Business Name e.g. moregalleries2">
-<input id="client" placeholder="Client Name e.g. morayo">
-<input id="phone" placeholder="Client Phone (optional)">
+<h3>Items</h3>
+<table id="itemsTable">
+<thead><tr><th>Item</th><th>Desc</th><th>Qty</th><th>Price</th><th></th></tr></thead>
+<tbody id="itemsBody"></tbody>
+</table>
+<button onclick="addItem()" style="margin-top:8px">+ Add Item</button>
 
-<div id="items">
- <div class="row">
-  <input class="n" placeholder="Item e.g. human hair">
-  <input class="q" type="number" value="1" oninput="calc()">
-  <input class="p" type="number" placeholder="Price" oninput="calc()">
- </div>
+<div style="text-align:right;margin-top:10px;font-weight:bold">Total: ₦<span id="totalDisplay">0</span></div>
+
+<h3>Signature</h3>
+<input type="file" id="sigUpload" accept="image/*">
+<div style="font-size:12px;color:gray">Leave blank if you want to sign by hand after printing</div>
+
+<div id="invoicePreview">
+<h3 id="pBizName">Business Name</h3>
+<p>Client: <span id="pClient"></span></p>
+<div id="pItems"></div>
+<p><strong>Total: ₦<span id="pTotal">0</span></strong></p>
+<div id="pSigArea" style="margin-top:30px">
+<div>__________________</div>
+<div style="font-size:12px">Seller Signature</div>
+<img id="pSigImg" style="max-width:120px;display:none;margin-top:5px">
+</div>
 </div>
 
-<button onclick="add()" style="margin:10px 0;padding:8px 14px;border-radius:8px;border:1px solid #ccc">+ Add Item</button>
-
-<div id="total">Total: ₦0</div>
-
-<button class="gen" onclick="gen()">Generate & Save Invoice</button>
+<button class="btn" style="background:#16a34a" onclick="handleGenerate()">Generate Invoice</button>
+<button class="btn" style="background:#2563eb" onclick="downloadPDF()">Download PDF (Files)</button>
+<button class="btn" style="background:#7c3aed" onclick="downloadJPG()">Download JPG (Gallery)</button>
 
 <script>
-const supa = window.supabase.createClient("https://owsismprvbndwlaktohz.supabase.co","sb_publishable_8auPuaDH5Iq65d_6LwPEKQ_yilaScba")
+const SUPA_URL = "owsismprvbndwlaktohz.superbase.co";
+const SUPA_KEY = "sb_publishable_8auPuaDH5Iq65d_6LwPEKQ_yilaScba";
+const supabaseClient = supabase.createClient(SUPA_URL, SUPA_KEY);
 
-// --- PAYSTACK MONTHLY SUBSCRIPTION LOGIC ---
-const PRO_PRICE = 3000
-const FREE_LIMIT = 3
-const PAYSTACK_KEY = "pk_live_f5336ea9deef3d7c492b102600f02716f38adaed"
+let items = [{name:"",desc:"",qty:1,price:0}];
+let signatureDataUrl = "";
 
-function getInvoiceCount(){ return parseInt(localStorage.getItem("qi_count")||"0") }
-
-function isProUser(){
-  let expiry = localStorage.getItem("qi_pro_expiry")
-  if(!expiry) return false
-  if(new Date() > new Date(expiry)){
-    localStorage.removeItem("qi_pro")
-    localStorage.removeItem("qi_pro_expiry")
-    return false
-  }
-  return localStorage.getItem("qi_pro") === "yes"
+function addItem(){ items.push({name:"",desc:"",qty:1,price:0}); renderItems(); }
+function renderItems(){
+  const body = document.getElementById("itemsBody");
+  body.innerHTML="";
+  items.forEach((it,i)=>{
+    body.innerHTML+=`<tr>
+    <td><input value="${it.name}" oninput="items[${i}].name=this.value; updatePreview()"></td>
+    <td><input value="${it.desc}" placeholder="small desc" oninput="items[${i}].desc=this.value; updatePreview()"></td>
+    <td><input type="number" value="${it.qty}" style="width:60px" oninput="items[${i}].qty=parseInt(this.value)||0; updatePreview()"></td>
+    <td><input type="number" value="${it.price}" style="width:80px" oninput="items[${i}].price=parseFloat(this.value)||0; updatePreview()"></td>
+    <td><button onclick="items.splice(${i},1);renderItems();updatePreview()">x</button></td>
+    </tr>`;
+  });
+  updatePreview();
 }
-function getDaysLeft(){
-  let expiry = localStorage.getItem("qi_pro_expiry")
-  if(!expiry) return 0
-  let diff = new Date(expiry) - new Date()
-  return Math.ceil(diff / (1000*60*60*24))
-}
-function payForPro(){
-  let email = prompt("Enter your email for Pro receipt:")
-  if(!email) return
-  let handler = PaystackPop.setup({
-    key: PAYSTACK_KEY,
-    email: email,
-    amount: PRO_PRICE * 100,
-    currency: "NGN",
-    ref: "QI-PRO-"+Date.now(),
-    callback: function(res){
-      let expiryDate = new Date()
-      expiryDate.setDate(expiryDate.getDate() + 30)
-      localStorage.setItem("qi_pro","yes")
-      localStorage.setItem("qi_pro_expiry", expiryDate.toISOString())
-      alert("Pro unlocked for 30 days! Expires: "+expiryDate.toLocaleDateString()+"\nRef: "+res.reference)
-      updatePlanUI()
-    },
-    onClose: function(){ alert("Payment cancelled") }
-  })
-  handler.openIframe()
-}
-function updatePlanUI(){
- let c=getInvoiceCount()
- let el=document.getElementById("planStatus")
- if(!el) return
- if(isProUser()){
-   el.innerHTML=`✅ <b>Pro Monthly</b> - ${getDaysLeft()} days left (expires ${new Date(localStorage.getItem("qi_pro_expiry")).toLocaleDateString()}) - Unlimited`
- } else {
-   let left = FREE_LIMIT - c
-   if(left <=0){
-     el.innerHTML=`❌ <b>Free limit reached (3/3)</b> <button onclick="payForPro()" style="margin-left:10px;background:#000;color:white;border:none;padding:8px 12px;border-radius:8px">Renew Pro ₦${PRO_PRICE}/month</button>`
-   } else {
-     el.innerHTML=`🆓 <b>Free:</b> ${c}/${FREE_LIMIT} used - ${left} left <button onclick="payForPro()" style="margin-left:10px;background:#00C3F7;color:white;border:none;padding:5px 10px;border-radius:6px">Go Pro ₦${PRO_PRICE}/mo</button>`
-   }
- }
-}
-// --- END PAYSTACK LOGIC ---
-
-function getId(){
- let id=localStorage.getItem("qi_id")
- if(!id){id="user_"+Date.now(); localStorage.setItem("qi_id",id)}
- return id
+function getTotal(){ return items.reduce((s,it)=>s+(it.qty*it.price),0); }
+function updatePreview(){
+  document.getElementById("pBizName").innerText = document.getElementById("bizName").value || "Business Name";
+  document.getElementById("pClient").innerText = document.getElementById("clientName").value || "-";
+  let html="<table style='width:100%'><tr><th>Item</th><th>Qty</th><th>Price</th></tr>";
+  items.forEach(it=>{
+    html+=`<tr><td>${it.name}<br><small style='color:gray'>${it.desc}</small></td><td>${it.qty}</td><td>₦${it.qty*it.price}</td></tr>`;
+  });
+  html+="</table>";
+  document.getElementById("pItems").innerHTML=html;
+  document.getElementById("totalDisplay").innerText=getTotal().toLocaleString();
+  document.getElementById("pTotal").innerText=getTotal().toLocaleString();
 }
 
-let logoData = localStorage.getItem("qi_logo") || null
+document.getElementById("sigUpload").addEventListener("change",function(e){
+  const file=e.target.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    signatureDataUrl=ev.target.result;
+    document.getElementById("pSigImg").src=signatureDataUrl;
+    document.getElementById("pSigImg").style.display="block";
+  };
+  reader.readAsDataURL(file);
+});
 
-// restore saved business and logo
-window.onload = function(){
- let savedBiz = localStorage.getItem("biz_name")
- if(savedBiz) document.getElementById("biz").value = savedBiz
- if(logoData){
-   let img = document.getElementById("logoPreview")
-   img.src = logoData
-   img.style.display = "block"
- }
- calc()
- updatePlanUI()
+function getUserId(){ let id=localStorage.getItem("qi_uid"); if(!id){ id="user_"+Math.random().toString(36).substring(2,9); localStorage.setItem("qi_uid",id);} return id; }
+
+async function handleGenerate(){
+  let count=parseInt(localStorage.getItem("qi_count")||"0");
+  let isPro=localStorage.getItem("qi_pro")==="yes";
+  if(!isPro && count>=3){ payWithPaystack(); return; }
+  // save to supabase
+  try{
+    await supabaseClient.from("invoices").insert([{user_id:getUserId(), business_name:document.getElementById("bizName").value, client_name:document.getElementById("clientName").value, total:getTotal(), items:items}]);
+  }catch(e){ console.log(e); }
+  localStorage.setItem("qi_count",count+1);
+  updateFreeBanner();
+  alert("Invoice generated! Now download PDF or JPG.");
 }
 
-document.getElementById("biz").addEventListener("input", e=>localStorage.setItem("biz_name", e.target.value))
-
-function loadLogo(e){
-  let file = e.target.files[0]
-  if(!file) return
-  let reader = new FileReader()
-  reader.onload = function(ev){
-    logoData = ev.target.result
-    localStorage.setItem("qi_logo", logoData)
-    let img = document.getElementById("logoPreview")
-    img.src = logoData
-    img.style.display = "block"
-  }
-  reader.readAsDataURL(file)
+function updateFreeBanner(){
+  let count=parseInt(localStorage.getItem("qi_count")||"0");
+  let isPro=localStorage.getItem("qi_pro")==="yes";
+  if(isPro){ document.getElementById("freeBanner").innerHTML="✅ Pro Active"; return; }
+  document.getElementById("countLeft").innerText=Math.max(0,3-count);
 }
 
-function add(){
- let d=document.createElement("div")
- d.className="row"
- d.innerHTML=`<input class="n" placeholder="Item"><input class="q" type="number" value="1" oninput="calc()"><input class="p" type="number" placeholder="Price" oninput="calc()">`
- document.getElementById("items").appendChild(d)
+function payWithPaystack(){
+  let email=document.getElementById("clientEmail").value||"customer@quickinvoice.ng";
+  let handler=PaystackPop.setup({
+    key:'pk_live_f5336ea9deef3d7c492b102600f02716f38adaed',
+    email:email,
+    amount:300000,
+    currency:'NGN',
+    ref:'QI_'+Math.floor(Math.random()*1000000000+1),
+    onClose:function(){ alert('Payment closed'); },
+    callback:function(response){
+      alert('Payment success: '+response.reference);
+      localStorage.setItem("qi_pro","yes");
+      localStorage.setItem("qi_pro_expiry", new Date(Date.now()+30*24*60*60*1000).toISOString());
+      localStorage.setItem("qi_count","0");
+      location.reload();
+    }
+  });
+  handler.openIframe();
 }
 
-function calc(){
- let qs=document.querySelectorAll(".q")
- let ps=document.querySelectorAll(".p")
- let t=0
- for(let i=0;i<qs.length;i++){
-  t+= (parseInt(qs[i].value)||0) * (parseInt(ps[i].value)||0)
- }
- document.getElementById("total").innerText="Total: ₦"+t.toLocaleString()
- return t
+function downloadPDF(){
+  const {jsPDF}=window.jspdf;
+  html2canvas(document.getElementById("invoicePreview")).then(canvas=>{
+    const imgData=canvas.toDataURL('image/png');
+    const pdf=new jsPDF();
+    pdf.addImage(imgData,'PNG',10,10,190,0);
+    pdf.save('invoice_'+Date.now()+'.pdf');
+  });
+}
+function downloadJPG(){
+  html2canvas(document.getElementById("invoicePreview")).then(canvas=>{
+    let link=document.createElement('a');
+    link.download='invoice_'+Date.now()+'.jpg';
+    link.href=canvas.toDataURL('image/jpeg',0.95);
+    link.click();
+  });
 }
 
-async function gen(){
- if(!isProUser() && getInvoiceCount() >= FREE_LIMIT){
-   if(confirm("You have used your 3 free invoices!\n\nPay ₦"+PRO_PRICE+" to unlock unlimited for 30 days?\n\nClick OK to pay with Paystack")){
-     payForPro()
-   }
-   return
- }
-
- let biz=document.getElementById("biz").value||"My Business"
- let client=document.getElementById("client").value
- if(!client) return alert("Enter client name")
- let ns=document.querySelectorAll(".n")
- let qs=document.querySelectorAll(".q")
- let ps=document.querySelectorAll(".p")
- let items=[]
- let total=0
- for(let i=0;i<ns.length;i++){
-  let name=ns[i].value||"Item "+(i+1)
-  let qty=parseInt(qs[i].value)||1
-  let price=parseInt(ps[i].value)||0
-  if(price>0){items.push({name,qty,price}); total+=qty*price}
- }
- if(total==0) return alert("Enter price for at least 1 item")
-
- try{
-   await supa.from("invoices").insert({user_id:getId(),client_name:client,items:items,total:total,invoice_number:"QI-"+Date.now().toString().slice(-5)})
- }catch(e){console.log(e)}
-
- const {jsPDF}=window.jspdf
- const doc=new jsPDF()
- doc.setFontSize(12)
-
- if(logoData){
-   try{doc.addImage(logoData,"PNG",14,10,30,20)}catch(err){try{doc.addImage(logoData,"JPEG",14,10,30,20)}catch(e2){}}
-   doc.setFontSize(18); doc.text(biz,50,20)
-   doc.setFontSize(11); doc.text("Client: "+client,50,28)
-   doc.text("Date: "+new Date().toLocaleDateString(),50,34)
- } else {
-   doc.setFontSize(18); doc.text(biz,14,20)
-   doc.setFontSize(11); doc.text("Client: "+client,14,28)
-   doc.text("Date: "+new Date().toLocaleDateString(),14,34)
- }
-
- let y=50
- doc.setFillColor(0,0,0); doc.rect(14,y-7,182,9,"F")
- doc.setTextColor(255,255,255); doc.setFontSize(11)
- doc.text("Item",15,y); doc.text("Qty",105,y); doc.text("Price",130,y); doc.text("Amount",160,y)
- doc.setTextColor(0,0,0)
- y+=10
- items.forEach(it=>{
-  doc.text(it.name.substring(0,35),15,y)
-  doc.text(String(it.qty),105,y)
-  doc.text("N"+it.price.toLocaleString(),130,y)
-  doc.text("N"+(it.qty*it.price).toLocaleString(),160,y)
-  y+=8
-  doc.setDrawColor(230); doc.line(14,y-3,196,y-3)
- })
- y+=8
- doc.setFontSize(14); doc.text("TOTAL: N"+total.toLocaleString(),14,y)
- y+=10; doc.setFontSize(10); doc.setTextColor(100)
- doc.text("Thank you for your business!",14,y)
- doc.text("Powered by QuickInvoice.ng",14,y+6)
-
- doc.save("Invoice-"+client+".pdf")
-
- if(!isProUser()){
-   let c = getInvoiceCount()
-   localStorage.setItem("qi_count", c+1)
-   updatePlanUI()
-   let left = FREE_LIMIT - (c+1)
-   if(left > 0) alert("Invoice PDF downloaded! "+left+" free left")
-   else alert("Invoice PDF downloaded! That was your last free. Next one needs Pro ₦3k/month")
- } else {
-   alert("Invoice PDF downloaded!")
- }
-}
+renderItems();
+updateFreeBanner();
+document.getElementById("bizName").addEventListener("input",updatePreview);
+document.getElementById("clientName").addEventListener("input",updatePreview);
 </script>
 </body>
 </html>

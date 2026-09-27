@@ -85,8 +85,14 @@ function getUserId(){ let id=localStorage.getItem("qi_uid"); if(!id){ id="user_"
 async function checkProStatus(){
   const uid = getUserId();
   try{
-    const { data } = await supabaseClient.from("subscriptions").select("*").eq("user_id", uid).single();
-    if(data && data.is_pro && new Date(data.expiry) > new Date()){
+    const { data: sub } = await supabaseClient
+  .from("subscriptions")
+  .select("*")
+  .eq("user_id", userId)
+  .maybeSingle();  // <-- not single()
+
+const isPro = sub?.is_pro && new Date(sub.expiry) > new Date();
+{
       localStorage.setItem("qi_pro","yes");
       localStorage.setItem("qi_pro_expiry", data.expiry);
       document.getElementById("freeBanner").innerHTML = "✅ Pro Active - Unlimited";
@@ -165,13 +171,12 @@ function payWithPaystack(){
     callback: async function(response){
       // SAVE PRO TO SUPABASE - SECURE
       const expiry = new Date(Date.now()+30*24*60*60*1000).toISOString();
-      await supabaseClient.from("profiles").upsert({
-        user_id: getUserId(),
-        is_pro: true,
-        expiry: expiry,
-        email: email,
-        reference: response.reference
-      }, {onConflict:'user_id'});
+
+await supabaseClient.from("subscriptions").upsert({ 
+  user_id: userId, 
+  is_pro: true, 
+  expiry: expiry 
+}, { onConflict: 'user_id' });
 
       localStorage.setItem("qi_pro","yes");
       localStorage.setItem("qi_pro_expiry", expiry);

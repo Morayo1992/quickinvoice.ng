@@ -91,12 +91,11 @@ async function checkProStatus(){
   .eq("user_id", userId)
   .maybeSingle();  // <-- not single()
 
-const isPro = sub?.is_pro && new Date(sub.expiry) > new Date();
-{
-      localStorage.setItem("qi_pro","yes");
-      localStorage.setItem("qi_pro_expiry", data.expiry);
-      document.getElementById("freeBanner").innerHTML = "✅ Pro Active - Unlimited";
-      return true;
+    if (sub?.is_pro && new Date(sub.expiry) > new Date()) {
+        localStorage.setItem("qi_pro","yes");
+        localStorage.setItem("qi_pro_expiry", sub.expiry);
+        document.getElementById("freeBanner").innerHTML = "✅ Pro Active - Unlimited";
+        return true;
     } else {
       // not pro
       let count=parseInt(localStorage.getItem("qi_count")||"0");

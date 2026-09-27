@@ -157,8 +157,32 @@ function payWithPaystack(){
   handler.openIframe();
 }
 
-function downloadPDF(){ const jsPDF=window.jspdf.jsPDF; html2canvas(document.getElementById("invoicePreview"),{scale:2}).then(function(c){ const d=c.toDataURL('image/png'); const pdf=new jsPDF(); const w=pdf.internal.pageSize.getWidth(); const h=(c.height*w)/c.width; pdf.addImage(d,'PNG',0,0,w,h); pdf.save('invoice_'+Date.now()+'.pdf'); }); }
-function downloadJPG(){ html2canvas(document.getElementById("invoicePreview"),{scale:2}).then(function(c){ let a=document.createElement('a'); a.download='invoice_'+Date.now()+'.jpg'; a.href=c.toDataURL('image/jpeg',0.95); a.click(); }); }
+function checkCanDownload(){
+  let isPro = localStorage.getItem("qi_pro")==="yes";
+  let count = parseInt(localStorage.getItem("qi_count")||"0");
+  if(!isPro && count>=3){
+    alert("Free limit reached (3/3). Please upgrade to Pro ₦3000 to download.");
+    payWithPaystack();
+    return false;
+  }
+  return true;
+}
+
+function downloadPDF(){
+  if(!checkCanDownload()) return;
+  const jsPDF=window.jspdf.jsPDF;
+  html2canvas(document.getElementById("invoicePreview"),{scale:2}).then(function(c){
+    const d=c.toDataURL('image/png');
+    const pdf=new jsPDF(); const w=pdf.internal.pageSize.getWidth(); const h=(c.height*w)/c.width;
+    pdf.addImage(d,'PNG',0,0,w,h); pdf.save('invoice_'+Date.now()+'.pdf');
+  });
+}
+function downloadJPG(){
+  if(!checkCanDownload()) return;
+  html2canvas(document.getElementById("invoicePreview"),{scale:2}).then(function(c){
+    let a=document.createElement('a'); a.download='invoice_'+Date.now()+'.jpg'; a.href=c.toDataURL('image/jpeg',0.95); a.click();
+  });
+}
 
 renderItems(); checkProStatus(); updatePreview();
 </script>

@@ -9,13 +9,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-body{font-family:system-ui;padding:15px;max-width:600px;margin:auto}
-input,textarea{width:100%;padding:10px;margin:6px 0;border:1px solid #ddd;border-radius:8px}
+body{font-family:system-ui;padding:15px;max-width:600px;margin:auto;background:#f9f9f9}
+input,textarea{width:100%;padding:10px;margin:6px 0;border:1px solid #ddd;border-radius:8px;box-sizing:border-box}
 table{width:100%;border-collapse:collapse;margin-top:10px}
-th,td{border:1px solid #eee;padding:8px;text-align:left}
-#invoicePreview{border:1px solid #000;padding:20px;margin-top:20px;background:#fff}
+th,td{border:1px solid #eee;padding:6px;text-align:left;background:#fff}
+#invoicePreview{border:1px solid #000;padding:20px;margin-top:20px;background:#fff;min-height:400px}
 .banner{background:#fef3c7;padding:10px;text-align:center;border-radius:8px;margin-bottom:10px}
-.btn{padding:12px;border:none;border-radius:8px;color:#fff;cursor:pointer;width:100%;margin-top:8px}
+.btn{padding:12px;border:none;border-radius:8px;color:#fff;cursor:pointer;width:100%;margin-top:8px;font-weight:bold}
+.logo-preview{max-width:80px;max-height:80px;display:none;margin-bottom:10px}
 </style>
 </head>
 <body>
@@ -24,69 +25,93 @@ th,td{border:1px solid #eee;padding:8px;text-align:left}
 
 <h2>Create Invoice</h2>
 
-<input id="bizName" placeholder="Your Business Name">
-<input id="clientName" placeholder="Client Name">
-<input id="clientEmail" placeholder="Client Email (for payment)">
+<label><strong>Business Logo (optional)</strong></label>
+<input type="file" id="logoUpload" accept="image/*">
+
+<label><strong>Your Business Name</strong></label>
+<input id="bizName" placeholder="e.g. Tunde Fashion Hub" oninput="updatePreview()">
+
+<label><strong>Client Name</strong></label>
+<input id="clientName" placeholder="Client Name" oninput="updatePreview()">
+
+<label><strong>Client Email (for Paystack receipt)</strong></label>
+<input id="clientEmail" placeholder="client@gmail.com">
 
 <h3>Items</h3>
-<table id="itemsTable">
-<thead><tr><th>Item</th><th>Desc</th><th>Qty</th><th>Price</th><th></th></tr></thead>
-<tbody id="itemsBody"></tbody>
-</table>
-<button onclick="addItem()" style="margin-top:8px">+ Add Item</button>
+<div id="itemsContainer"></div>
+<button onclick="addItem()" style="padding:8px 14px;margin-top:8px;background:#e5e7eb;border:none;border-radius:6px;cursor:pointer">+ Add Item</button>
 
-<div style="text-align:right;margin-top:10px;font-weight:bold">Total: ₦<span id="totalDisplay">0</span></div>
+<div style="text-align:right;margin-top:15px;font-weight:bold;font-size:18px">Total: ₦<span id="totalDisplay">0</span></div>
 
-<h3>Signature</h3>
+<h3 style="margin-top:20px">Signature</h3>
+<label>Upload your signature image (from phone gallery)</label>
 <input type="file" id="sigUpload" accept="image/*">
-<div style="font-size:12px;color:gray">Leave blank if you want to sign by hand after printing</div>
+<p style="font-size:12px;color:gray">It will appear at bottom of invoice above "Seller Signature" line. If blank, leave space for hand sign after printing.</p>
 
 <div id="invoicePreview">
-<h3 id="pBizName">Business Name</h3>
-<p>Client: <span id="pClient"></span></p>
+<div style="display:flex;justify-content:space-between;align-items:start">
+<div>
+<img id="pLogo" class="logo-preview" style="display:none">
+<h3 id="pBizName" style="margin:0">Business Name</h3>
+</div>
+<div style="text-align:right;font-size:12px">Date: <span id="pDate"></span></div>
+</div>
+<hr>
+<p>Bill To: <strong><span id="pClient">-</span></strong></p>
 <div id="pItems"></div>
-<p><strong>Total: ₦<span id="pTotal">0</span></strong></p>
-<div id="pSigArea" style="margin-top:30px">
+<p style="text-align:right;margin-top:15px"><strong>Total: ₦<span id="pTotal">0</span></strong></p>
+
+<div id="pSigArea" style="margin-top:50px;display:flex;flex-direction:column;align-items:flex-start">
+<img id="pSigImg" style="max-width:130px;max-height:60px;display:none;margin-bottom:5px">
 <div>__________________</div>
 <div style="font-size:12px">Seller Signature</div>
-<img id="pSigImg" style="max-width:120px;display:none;margin-top:5px">
 </div>
 </div>
 
-<button class="btn" style="background:#16a34a" onclick="handleGenerate()">Generate Invoice</button>
-<button class="btn" style="background:#2563eb" onclick="downloadPDF()">Download PDF (Files)</button>
-<button class="btn" style="background:#7c3aed" onclick="downloadJPG()">Download JPG (Gallery)</button>
+<button class="btn" style="background:#16a34a" onclick="handleGenerate()">Generate & Save Invoice</button>
+<button class="btn" style="background:#2563eb" onclick="downloadPDF()">Download PDF (to Files)</button>
+<button class="btn" style="background:#7c3aed" onclick="downloadJPG()">Download JPG (to Gallery)</button>
 
 <script>
-const SUPA_URL = "owsismprvbndwlaktohz.superbase.co";
-const SUPA_KEY = "sb_publishable_8auPuaDH5Iq65d_6LwPEKQ_yilaScba";
-const supabaseClient = supabase.createClient(SUPA_URL, SUPA_KEY);
+const SUPA_URL = "https://owsismprvbndwlaktohz.supabase.co";
+const SUPA_KEY = "sb_publishable_8auPuaDH5Iq65d_6LwPEKQ_yilaScba"; // <-- paste your key
+const supabaseClient = window.supabase.createClient(SUPA_URL, SUPA_KEY);
 
 let items = [{name:"",desc:"",qty:1,price:0}];
 let signatureDataUrl = "";
+let logoDataUrl = "";
 
 function addItem(){ items.push({name:"",desc:"",qty:1,price:0}); renderItems(); }
+
 function renderItems(){
-  const body = document.getElementById("itemsBody");
-  body.innerHTML="";
+  const cont = document.getElementById("itemsContainer");
+  cont.innerHTML="";
   items.forEach((it,i)=>{
-    body.innerHTML+=`<tr>
-    <td><input value="${it.name}" oninput="items[${i}].name=this.value; updatePreview()"></td>
-    <td><input value="${it.desc}" placeholder="small desc" oninput="items[${i}].desc=this.value; updatePreview()"></td>
-    <td><input type="number" value="${it.qty}" style="width:60px" oninput="items[${i}].qty=parseInt(this.value)||0; updatePreview()"></td>
-    <td><input type="number" value="${it.price}" style="width:80px" oninput="items[${i}].price=parseFloat(this.value)||0; updatePreview()"></td>
-    <td><button onclick="items.splice(${i},1);renderItems();updatePreview()">x</button></td>
-    </tr>`;
+    const row = document.createElement("div");
+    row.style.cssText="display:flex;gap:5px;margin-bottom:6px;flex-wrap:wrap;background:#fff;padding:8px;border-radius:8px;border:1px solid #eee";
+    row.innerHTML=`
+      <input style="flex:2" placeholder="Item name" value="${it.name}" oninput="items[${i}].name=this.value; updatePreview()">
+      <input style="flex:2" placeholder="Desc (optional)" value="${it.desc}" oninput="items[${i}].desc=this.value; updatePreview()">
+      <input type="number" style="flex:1" placeholder="Qty" value="${it.qty}" oninput="items[${i}].qty=parseInt(this.value)||0; updatePreview()">
+      <input type="number" style="flex:1" placeholder="Price" value="${it.price}" oninput="items[${i}].price=parseFloat(this.value)||0; updatePreview()">
+      <button onclick="items.splice(${i},1);renderItems();updatePreview()" style="background:#fee2e2;border:none;border-radius:5px;padding:5px 8px">X</button>
+    `;
+    cont.appendChild(row);
   });
   updatePreview();
 }
+
 function getTotal(){ return items.reduce((s,it)=>s+(it.qty*it.price),0); }
+
 function updatePreview(){
   document.getElementById("pBizName").innerText = document.getElementById("bizName").value || "Business Name";
   document.getElementById("pClient").innerText = document.getElementById("clientName").value || "-";
-  let html="<table style='width:100%'><tr><th>Item</th><th>Qty</th><th>Price</th></tr>";
+  document.getElementById("pDate").innerText = new Date().toLocaleDateString();
+
+  let html="<table style='width:100%;border-collapse:collapse'><tr><th>Item</th><th>Qty</th><th>Amount</th></tr>";
   items.forEach(it=>{
-    html+=`<tr><td>${it.name}<br><small style='color:gray'>${it.desc}</small></td><td>${it.qty}</td><td>₦${it.qty*it.price}</td></tr>`;
+    if(!it.name &&!it.price) return;
+    html+=`<tr><td>${it.name}<br><small style='color:gray'>${it.desc||''}</small></td><td>${it.qty}</td><td>₦${(it.qty*it.price).toLocaleString()}</td></tr>`;
   });
   html+="</table>";
   document.getElementById("pItems").innerHTML=html;
@@ -94,14 +119,28 @@ function updatePreview(){
   document.getElementById("pTotal").innerText=getTotal().toLocaleString();
 }
 
+// Logo upload
+document.getElementById("logoUpload").addEventListener("change",function(e){
+  const file=e.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    logoDataUrl=ev.target.result;
+    const img=document.getElementById("pLogo");
+    img.src=logoDataUrl; img.style.display="block";
+  };
+  reader.readAsDataURL(file);
+});
+
+// Signature upload - THIS IS WHERE SIGNATURE GOES
 document.getElementById("sigUpload").addEventListener("change",function(e){
-  const file=e.target.files[0];
-  if(!file) return;
+  const file=e.target.files[0]; if(!file) return;
   const reader=new FileReader();
   reader.onload=function(ev){
     signatureDataUrl=ev.target.result;
-    document.getElementById("pSigImg").src=signatureDataUrl;
-    document.getElementById("pSigImg").style.display="block";
+    const img=document.getElementById("pSigImg");
+    img.src=signatureDataUrl;
+    img.style.display="block";
+    console.log("Signature placed at bottom of invoice");
   };
   reader.readAsDataURL(file);
 });
@@ -112,26 +151,25 @@ async function handleGenerate(){
   let count=parseInt(localStorage.getItem("qi_count")||"0");
   let isPro=localStorage.getItem("qi_pro")==="yes";
   if(!isPro && count>=3){ payWithPaystack(); return; }
-  // save to supabase
   try{
     await supabaseClient.from("invoices").insert([{user_id:getUserId(), business_name:document.getElementById("bizName").value, client_name:document.getElementById("clientName").value, total:getTotal(), items:items}]);
   }catch(e){ console.log(e); }
   localStorage.setItem("qi_count",count+1);
   updateFreeBanner();
-  alert("Invoice generated! Now download PDF or JPG.");
+  alert("Invoice saved! Now download PDF or JPG.");
 }
 
 function updateFreeBanner(){
   let count=parseInt(localStorage.getItem("qi_count")||"0");
   let isPro=localStorage.getItem("qi_pro")==="yes";
-  if(isPro){ document.getElementById("freeBanner").innerHTML="✅ Pro Active"; return; }
+  if(isPro){ document.getElementById("freeBanner").innerHTML="✅ Pro Active - Unlimited"; return; }
   document.getElementById("countLeft").innerText=Math.max(0,3-count);
 }
 
 function payWithPaystack(){
   let email=document.getElementById("clientEmail").value||"customer@quickinvoice.ng";
   let handler=PaystackPop.setup({
-    key:'pk_live_f5336ea9deef3d7c492b102600f02716f38adaed',
+    key:'pk_live_f5336ea9deef3d7c492b102600f02716f38adaed', // <-- put your paystack live key
     email:email,
     amount:300000,
     currency:'NGN',
@@ -150,15 +188,18 @@ function payWithPaystack(){
 
 function downloadPDF(){
   const {jsPDF}=window.jspdf;
-  html2canvas(document.getElementById("invoicePreview")).then(canvas=>{
+  html2canvas(document.getElementById("invoicePreview"),{scale:2}).then(canvas=>{
     const imgData=canvas.toDataURL('image/png');
     const pdf=new jsPDF();
-    pdf.addImage(imgData,'PNG',10,10,190,0);
+    const imgProps=pdf.getImageProperties(imgData);
+    const pdfWidth=pdf.internal.pageSize.getWidth();
+    const pdfHeight=(imgProps.height*pdfWidth)/imgProps.width;
+    pdf.addImage(imgData,'PNG',0,0,pdfWidth,pdfHeight);
     pdf.save('invoice_'+Date.now()+'.pdf');
   });
 }
 function downloadJPG(){
-  html2canvas(document.getElementById("invoicePreview")).then(canvas=>{
+  html2canvas(document.getElementById("invoicePreview"),{scale:2}).then(canvas=>{
     let link=document.createElement('a');
     link.download='invoice_'+Date.now()+'.jpg';
     link.href=canvas.toDataURL('image/jpeg',0.95);
@@ -168,8 +209,7 @@ function downloadJPG(){
 
 renderItems();
 updateFreeBanner();
-document.getElementById("bizName").addEventListener("input",updatePreview);
-document.getElementById("clientName").addEventListener("input",updatePreview);
+document.getElementById("pDate").innerText = new Date().toLocaleDateString();
 </script>
 </body>
 </html>

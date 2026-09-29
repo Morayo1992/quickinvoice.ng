@@ -121,10 +121,10 @@ document.getElementById("sigUpload").addEventListener("change",function(e){
 });
 
 async function handleGenerate(){
+  if(!consumeCreditOrPay()) return;
   try{
     await supabaseClient.from("invoices").insert([{user_id:userId,business_name:document.getElementById("bizName").value,client_name:document.getElementById("clientName").value,total:getTotal(),items:items}]);
   }catch(e){ console.log(e); }
-  await checkProStatus();
   alert("Invoice saved!");
 }
 
@@ -153,24 +153,27 @@ function payWithPaystack(){
   handler.openIframe();
 }
 
-function checkCanDownload(){
+// Single shared gate for ALL three actions (Generate & Save, Download PDF, Download JPG).
+// Every call here either consumes one of the 3 shared free credits, or — once they're
+// gone — blocks the action and opens the paywall. Pro users always pass through free.
+function consumeCreditOrPay(){
   let isPro = localStorage.getItem("qi_pro")==="yes";
+  if(isPro) return true;
+
   let count = parseInt(localStorage.getItem("qi_count")||"0");
-  if(!isPro && count>=3){
-    alert("Free limit reached (3/3). Please upgrade to Pro ₦3000 to download.");
+  if(count>=3){
+    alert("Free limit reached (3/3). Please upgrade to Pro ₦3000 to continue.");
     payWithPaystack();
     return false;
   }
-  if(!isPro){
-    count=count+1;
-    localStorage.setItem("qi_count", String(count));
-    document.getElementById("freeBanner").innerHTML='Free: <span id="countLeft">'+Math.max(0,3-count)+'</span>/3 left';
-  }
+  count=count+1;
+  localStorage.setItem("qi_count", String(count));
+  document.getElementById("freeBanner").innerHTML='Free: <span id="countLeft">'+Math.max(0,3-count)+'</span>/3 left';
   return true;
 }
 
 function downloadPDF(){
-  if(!checkCanDownload()) return;
+  if(!consumeCreditOrPay()) return;
   const jsPDF=window.jspdf.jsPDF;
   html2canvas(document.getElementById("invoicePreview"),{scale:2}).then(function(c){
     const d=c.toDataURL('image/png');
@@ -179,7 +182,7 @@ function downloadPDF(){
   });
 }
 function downloadJPG(){
-  if(!checkCanDownload()) return;
+  if(!consumeCreditOrPay()) return;
   html2canvas(document.getElementById("invoicePreview"),{scale:2}).then(function(c){
     let a=document.createElement('a'); a.download='invoice_'+Date.now()+'.jpg'; a.href=c.toDataURL('image/jpeg',0.95); a.click();
   });

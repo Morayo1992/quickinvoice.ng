@@ -14,9 +14,33 @@ input{width:100%;padding:10px;margin:6px 0;border:1px solid #ddd;border-radius:8
 .banner{background:#fef3c7;padding:10px;text-align:center;border-radius:8px;margin-bottom:10px}
 .btn{padding:12px;border:none;border-radius:8px;color:#fff;cursor:pointer;width:100%;margin-top:8px;font-weight:bold}
 .logo-preview{max-width:80px;max-height:80px}
+#authGate{position:fixed;inset:0;background:#fff;display:flex;align-items:center;justify-content:center;padding:20px;z-index:50}
+#authBox{max-width:340px;width:100%;text-align:center}
+#authBox h2{margin-top:0}
+#authBox small{color:#666}
 </style>
 </head>
 <body>
+
+<!-- Auth gate: shown until the user verifies their email via a one-time code -->
+<div id="authGate">
+  <div id="authBox">
+    <h2>Verify your email</h2>
+    <p><small>You get 3 free invoice downloads. We use your email to keep track of that, so please verify it.</small></p>
+    <div id="authEmailStep">
+      <input id="authEmail" type="email" placeholder="you@example.com">
+      <button class="btn" style="background:#16a34a" onclick="sendCode()">Send Code</button>
+    </div>
+    <div id="authCodeStep" style="display:none">
+      <p><small>Enter the 6-digit code sent to your email.</small></p>
+      <input id="authCode" placeholder="123456" inputmode="numeric">
+      <button class="btn" style="background:#16a34a" onclick="verifyCode()">Verify</button>
+      <button class="btn" style="background:#e5e7eb;color:#333" onclick="backToEmail()">Use a different email</button>
+    </div>
+  </div>
+</div>
+
+<div id="appContent" style="display:none">
 <div id="freeBanner" class="banner">Free: <span id="countLeft">3</span>/3 left</div>
 <h2>Create Invoice</h2>
 <label><b>Business Logo</b></label><input type="file" id="logoUpload" accept="image/*">
@@ -37,33 +61,93 @@ input{width:100%;padding:10px;margin:6px 0;border:1px solid #ddd;border-radius:8
 <button class="btn" style="background:#16a34a" onclick="handleGenerate()">Generate & Save Invoice</button>
 <button class="btn" style="background:#2563eb" onclick="downloadPDF()">Download PDF</button>
 <button class="btn" style="background:#7c3aed" onclick="downloadJPG()">Download JPG</button>
+</div>
 
 <script>
 const SUPA_URL = "https://owsismprvbndwlaktohz.supabase.co";
 const SUPA_KEY = "sb_publishable_8auPuaDH5Iq65d_6LwPEKQ_yilaScba";
 const supabaseClient = window.supabase.createClient(SUPA_URL, SUPA_KEY);
 let items = [{name:"",desc:"",qty:1,price:0}];
+let currentUser = null;
 
-function getUserId(){
-  let id=localStorage.getItem("qi_uid");
-  if(!id){ id="user_"+Math.random().toString(36).substring(2,9); localStorage.setItem("qi_uid",id); }
-  return id;
-}
-const userId = getUserId();
+/* ---------------- AUTH (email OTP, no password) ---------------- */
 
-async function checkProStatus(){
-  try{
-    const {data:sub}=await supabaseClient.from("subscriptions").select("*").eq("user_id",userId).maybeSingle();
-    if(sub && sub.is_pro && new Date(sub.expiry) > new Date()){
-      localStorage.setItem("qi_pro","yes");
-      document.getElementById("freeBanner").innerHTML="✅ Pro Active - Unlimited";
-      return true;
-    }
-  }catch(e){}
-  let count=parseInt(localStorage.getItem("qi_count")||"0");
-  document.getElementById("freeBanner").innerHTML='Free: <span id="countLeft">'+Math.max(0,3-count)+'</span>/3 left';
-  return count<3;
+async function initAuth(){
+  const { data:{ session } } = await supabaseClient.auth.getSession();
+  if(session && session.user){
+    currentUser = session.user;
+    await showApp();
+  } else {
+    document.getElementById("authGate").style.display="flex";
+    document.getElementById("appContent").style.display="none";
+  }
 }
+
+async function sendCode(){
+  const email = document.getElementById("authEmail").value.trim();
+  if(!email){ alert("Enter your email"); return; }
+  const { error } = await supabaseClient.auth.signInWithOtp({ email, options:{ shouldCreateUser:true } });
+  if(error){ alert(error.message); return; }
+  document.getElementById("authEmailStep").style.display="none";
+  document.getElementById("authCodeStep").style.display="block";
+}
+
+function backToEmail(){
+  document.getElementById("authEmailStep").style.display="block";
+  document.getElementById("authCodeStep").style.display="none";
+}
+
+async function verifyCode(){
+  const email = document.getElementById("authEmail").value.trim();
+  const token = document.getElementById("authCode").value.trim();
+  const { data, error } = await supabaseClient.auth.verifyOtp({ email, token, type:"email" });
+  if(error){ alert(error.message); return; }
+  currentUser = data.user;
+  await showApp();
+}
+
+async function showApp(){
+  document.getElementById("authGate").style.display="none";
+  document.getElementById("appContent").style.display="block";
+  await refreshCreditBanner();
+  renderItems();
+  updatePreview();
+}
+
+/* ---------------- CREDITS (enforced server-side via Postgres RPC, not localStorage) ---------------- */
+
+function updateBanner(freeUsed, isPro){
+  if(isPro){
+    document.getElementById("freeBanner").innerHTML = "✅ Pro Active - Unlimited";
+  } else {
+    document.getElementById("freeBanner").innerHTML = 'Free: <span id="countLeft">'+Math.max(0,3-freeUsed)+'</span>/3 left';
+  }
+}
+
+async function refreshCreditBanner(){
+  const { data, error } = await supabaseClient.rpc("get_credit_status");
+  if(error){ console.log(error); return; }
+  const row = data && data[0];
+  if(row) updateBanner(row.free_used, row.is_pro);
+}
+
+// The single gate every credit-consuming action goes through.
+// The database — not this browser — decides whether the action is allowed.
+async function consumeCreditOrPay(){
+  const { data, error } = await supabaseClient.rpc("try_consume_credit");
+  if(error){ alert("Couldn't check your credits: "+error.message); return false; }
+  const row = data && data[0];
+  if(!row){ alert("Couldn't check your credits, please retry."); return false; }
+  updateBanner(row.free_used, row.is_pro);
+  if(!row.allowed){
+    alert("Free limit reached (3/3). Please upgrade to Pro ₦3000 to continue.");
+    payWithPaystack();
+    return false;
+  }
+  return true;
+}
+
+/* ---------------- INVOICE UI (unchanged logic) ---------------- */
 
 window.addItem = function(){
   items.push({name:"",desc:"",qty:1,price:0});
@@ -120,60 +204,18 @@ document.getElementById("sigUpload").addEventListener("change",function(e){
   const r=new FileReader(); r.onload=function(ev){ const img=document.getElementById("pSigImg"); img.src=ev.target.result; img.style.display="block"; }; r.readAsDataURL(file);
 });
 
+/* ---------------- ACTIONS (Generate, PDF, JPG) — all share the same credit pool ---------------- */
+
 async function handleGenerate(){
-  if(!consumeCreditOrPay()) return;
+  if(!(await consumeCreditOrPay())) return;
   try{
-    await supabaseClient.from("invoices").insert([{user_id:userId,business_name:document.getElementById("bizName").value,client_name:document.getElementById("clientName").value,total:getTotal(),items:items}]);
+    await supabaseClient.from("invoices").insert([{user_id:currentUser.id,business_name:document.getElementById("bizName").value,client_name:document.getElementById("clientName").value,total:getTotal(),items:items}]);
   }catch(e){ console.log(e); }
   alert("Invoice saved!");
 }
 
-function payWithPaystack(){
-  let email=document.getElementById("clientEmail").value||"customer@quickinvoice.ng";
-  let handler=PaystackPop.setup({
-    key:'pk_test_60231c395a4e19b0be16d06b4b9417c09c2debde',
-    email:email,
-    amount:3000*100,
-    currency:'NGN',
-    ref:'QI_'+Math.floor(Math.random()*1000000000+1),
-    onClose:function(){ alert('Payment closed'); },
-    callback:function(response){
-      (async function(){
-        const expiry=new Date(Date.now()+30*24*60*60*1000).toISOString();
-        const {error}=await supabaseClient.from("subscriptions").upsert({user_id:userId,is_pro:true,expiry:expiry},{onConflict:'user_id'});
-        if(error){ alert(error.message); return; }
-        localStorage.setItem("qi_pro","yes");
-        localStorage.setItem("qi_pro_expiry",expiry);
-        localStorage.setItem("qi_count","0");
-        alert('Payment success! Pro activated ₦3000');
-        location.reload();
-      })();
-    }
-  });
-  handler.openIframe();
-}
-
-// Single shared gate for ALL three actions (Generate & Save, Download PDF, Download JPG).
-// Every call here either consumes one of the 3 shared free credits, or — once they're
-// gone — blocks the action and opens the paywall. Pro users always pass through free.
-function consumeCreditOrPay(){
-  let isPro = localStorage.getItem("qi_pro")==="yes";
-  if(isPro) return true;
-
-  let count = parseInt(localStorage.getItem("qi_count")||"0");
-  if(count>=3){
-    alert("Free limit reached (3/3). Please upgrade to Pro ₦3000 to continue.");
-    payWithPaystack();
-    return false;
-  }
-  count=count+1;
-  localStorage.setItem("qi_count", String(count));
-  document.getElementById("freeBanner").innerHTML='Free: <span id="countLeft">'+Math.max(0,3-count)+'</span>/3 left';
-  return true;
-}
-
-function downloadPDF(){
-  if(!consumeCreditOrPay()) return;
+async function downloadPDF(){
+  if(!(await consumeCreditOrPay())) return;
   const jsPDF=window.jspdf.jsPDF;
   html2canvas(document.getElementById("invoicePreview"),{scale:2}).then(function(c){
     const d=c.toDataURL('image/png');
@@ -181,14 +223,37 @@ function downloadPDF(){
     pdf.addImage(d,'PNG',0,0,w,h); pdf.save('invoice_'+Date.now()+'.pdf');
   });
 }
-function downloadJPG(){
-  if(!consumeCreditOrPay()) return;
+async function downloadJPG(){
+  if(!(await consumeCreditOrPay())) return;
   html2canvas(document.getElementById("invoicePreview"),{scale:2}).then(function(c){
     let a=document.createElement('a'); a.download='invoice_'+Date.now()+'.jpg'; a.href=c.toDataURL('image/jpeg',0.95); a.click();
   });
 }
 
-renderItems(); checkProStatus(); updatePreview();
+/* ---------------- PAYMENT ---------------- */
+
+function payWithPaystack(){
+  let email = (currentUser && currentUser.email) || document.getElementById("clientEmail").value || "customer@quickinvoice.ng";
+  let handler=PaystackPop.setup({
+    key:'pk_test_60231c395a4e19b0be16d06b4b9417c09c2debde', // TODO: replace with your LIVE public key before launch
+    email:email,
+    amount:3000*100,
+    currency:'NGN',
+    ref:'QI_'+Math.floor(Math.random()*1000000000+1),
+    onClose:function(){ alert('Payment closed'); },
+    callback:function(response){
+      (async function(){
+        const { error } = await supabaseClient.rpc("activate_pro", { p_reference: response.reference });
+        if(error){ alert(error.message); return; }
+        alert('Payment success! Pro activated ₦3000');
+        await refreshCreditBanner();
+      })();
+    }
+  });
+  handler.openIframe();
+}
+
+initAuth();
 </script>
 </body>
 </html>

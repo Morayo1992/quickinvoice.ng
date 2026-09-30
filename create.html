@@ -41,7 +41,7 @@ input{width:100%;padding:10px;margin:6px 0;border:1px solid #ddd;border-radius:8
 </div>
 
 <div id="appContent" style="display:none">
-<div id="freeBanner" class="banner">Free: <span id="countLeft">3</span>/3 left</div>
+<div id="freeBanner" class="banner">Free: <span id="countLeft">0</span>/3 used</div>
 <h2>Create Invoice</h2>
 <label><b>Business Logo</b></label><input type="file" id="logoUpload" accept="image/*">
 <label><b>Your Business Name</b></label><input id="bizName" placeholder="e.g. Tunde Fashion Hub">
@@ -119,8 +119,10 @@ async function showApp(){
 function updateBanner(freeUsed, isPro){
   if(isPro){
     document.getElementById("freeBanner").innerHTML = "✅ Pro Active - Unlimited";
+  } else if(freeUsed>=3){
+    document.getElementById("freeBanner").innerHTML = 'Free limit reached: <span id="countLeft">3</span>/3 used — upgrade to Pro';
   } else {
-    document.getElementById("freeBanner").innerHTML = 'Free: <span id="countLeft">'+Math.max(0,3-freeUsed)+'</span>/3 left';
+    document.getElementById("freeBanner").innerHTML = 'Free: <span id="countLeft">'+freeUsed+'</span>/3 used';
   }
 }
 
@@ -235,7 +237,7 @@ async function downloadJPG(){
 function payWithPaystack(){
   let email = (currentUser && currentUser.email) || document.getElementById("clientEmail").value || "customer@quickinvoice.ng";
   let handler=PaystackPop.setup({
-    key:'pk_test_60231c395a4e19b0be16d06b4b9417c09c2debde', // TODO: replace with your LIVE public key before launch
+    key:'pk_live_f5336ea9deef3d7c492b102600f02716f38adaed', // TODO: replace with your LIVE public key before launch
     email:email,
     amount:3000*100,
     currency:'NGN',
